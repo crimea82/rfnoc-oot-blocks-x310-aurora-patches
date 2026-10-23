@@ -38,7 +38,7 @@ rfnoc_image_builder -y icores/x310_Aurora_rfnoc_image_core.yml \
     -t X310_AA \
     -I . \
     -F /path/to/uhd/fpga \
-    -p /tools/Xilinx/Vivado/2024.2 \
+    -p /tools/Xilinx/Vivado \
     -j $(nproc)
 ```
 
@@ -51,7 +51,7 @@ rfnoc_image_builder -y icores/x310_Aurora1_rfnoc_image_core.yml \
     -I . \
     -F /path/to/uhd/fpga \
     -C . \
-    -p /tools/Xilinx/Vivado/2024.2 \
+    -p /tools/Xilinx/Vivado \
     -j $(nproc)
 ```
 
