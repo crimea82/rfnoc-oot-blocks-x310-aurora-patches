@@ -1,0 +1,30 @@
+From 888815a8082c14417604ed1849241b0a99f6d31a Mon Sep 17 00:00:00 2001
+From: yuriy <crimea82@protonmail.com>
+Date: Fri, 23 Oct 2026 18:58:23 -0400
+Subject: [PATCH 10/10] cmake: Require C++17 explicitly
+
+Without this, builds against package-installed UHD fall back to C++14
+where type trait _v variable templates are not available.
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ CMakeLists.txt | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index a2070f3..bff5d78 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -7,6 +7,9 @@
+ cmake_minimum_required(VERSION 3.12)
+ project(rfnoc-oot-blocks CXX C)
+ 
++set(CMAKE_CXX_STANDARD 17)
++set(CMAKE_CXX_STANDARD_REQUIRED ON)
++
+ #make sure our local CMake Modules path comes first
+ list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_SOURCE_DIR}/cmake/Modules)
+ 
+-- 
+2.34.1
+

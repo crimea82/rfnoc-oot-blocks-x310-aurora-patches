@@ -1,7 +1,7 @@
 From 9109868fe57c65189d401ec504a77c05177bb613 Mon Sep 17 00:00:00 2001
 From: yuriy <crimea82@protonmail.com>
 Date: Tue, 5 May 2026 20:45:25 -0400
-Subject: [PATCH 4/9] X310 aurora output example
+Subject: [PATCH 04/10] X310 aurora output example
 
 ---
  examples/rx_to_aurora.py | 220 +++++++++++++++++++++++++++++++++++++++
