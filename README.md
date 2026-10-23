@@ -10,8 +10,7 @@ are supported:
 ## Prerequisites
 
 Patched UHD 4.10.0.0 must be built and installed before building the bitfile.
-See the [uhd-x310-aurora-patches](https://gitlab.home.lan/yuriy/uhd-x310-aurora-patches)
-repo for instructions.
+See the uhd-x310-aurora-patches repo for instructions.
 
 ## Usage
 
@@ -23,7 +22,7 @@ make clean    # remove the cloned source tree
 The source repo URL and base commit can be overridden:
 
 ```
-make RFNOC_REPO=git@gitlab.home.lan:yuriy/rfnoc-oot-blocks.git
+make RFNOC_REPO=https://github.com/EttusResearch/rfnoc-oot-blocks.git
 ```
 
 ## Building the X310 Aurora bitfile
