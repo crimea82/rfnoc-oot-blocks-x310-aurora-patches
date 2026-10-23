@@ -1,4 +1,4 @@
-RFNOC_REPO   ?= git@gitlab.home.lan:yuriy/rfnoc-oot-blocks.git
+RFNOC_REPO   ?= https://github.com/EttusResearch/rfnoc-oot-blocks.git
 RFNOC_COMMIT ?= 3007aa1
 BUILD_DIR    ?= rfnoc-oot-blocks
 
