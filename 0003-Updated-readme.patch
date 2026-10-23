@@ -1,0 +1,46 @@
+From 6b88d08c81e937d6a9de207fc66d0a07777a2f56 Mon Sep 17 00:00:00 2001
+From: yuriy <crimea82@protonmail.com>
+Date: Mon, 4 May 2026 19:01:45 -0400
+Subject: [PATCH 3/9] Updated readme
+
+---
+ README.md | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/README.md b/README.md
+index 0ae59b4..8c36611 100644
+--- a/README.md
++++ b/README.md
+@@ -157,6 +157,8 @@ use files that were installed into the right location.
+ 
+ ___________________________________________________________________________________________________
+ 
++## Updated build for X310 Aurora OOT block
++
+ This build is using uhd 4.9.0.1 and the isntructions to build this Aurora image for X310 are as follows:
+ 
+ Build and install UHD from the modified source to get the updated BSP files:                                                                                                                                       
+@@ -192,3 +194,20 @@ Build and install UHD from the modified source to get the updated BSP files:
+   - build/usrp_x310_fpga_Aurora.bin                                                                                                                                                                                  
+   - build/usrp_x310_fpga_Aurora.lvbitx                      
+   - build/usrp_x310_fpga_Aurora.rpt
++
++
++Aurora is on SFP+ Port 0 (sfpp0). The AA target's defines are:                                                                                                                                                     
++                                                                                                                                                                                                                   
++  SFP0_RFNOC_AURORA=1   ← aurora on port 0                                                                                                                                                                           
++  SFP1_1GBE=1           ← 1 GigE on port 1                                                                                                                                                                           
++                                                                                                                                                                                                                     
++  On the X310 front panel, SFP0 is the left/top SFP+ cage (the one also used by the 1G/10G Ethernet configurations as the primary port). SFP1 carries the 1 GigE management/data link in this configuration.         
++                                                          
++  The X310's default IP addresses are stored in EEPROM (not in the FPGA bitfile), with factory defaults:                                                                                                             
++  - SFP0 (eth0): 192.168.10.2                                                                                                                                                                                      
++  - SFP1 (eth1): 192.168.20.2                                                                                                                                                                                        
++                             
++  In the X310_AA configuration SFP0 is aurora (bypasses Ethernet entirely), so the 1 GigE interface is on SFP1 at 192.168.20.2. The host NIC should be set to 192.168.20.1/24.                                       
++                                                                                                                                                                                                                     
++  You can verify or change the stored IP with:                                                                                                                                                                       
++  uhd_image_loader --args="type=x300,addr=192.168.20.2" --just-check-rev
+-- 
+2.34.1
+

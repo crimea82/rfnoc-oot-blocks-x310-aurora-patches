@@ -1,0 +1,27 @@
+From ec2d29b7984793afa4e179d616a0abbe682fd242 Mon Sep 17 00:00:00 2001
+From: yuriy <crimea82@protonmail.com>
+Date: Sun, 10 May 2026 16:09:27 -0400
+Subject: [PATCH 8/9] Updated isntructions in readme, again
+
+---
+ README.md | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/README.md b/README.md
+index a41d741..10c6c09 100644
+--- a/README.md
++++ b/README.md
+@@ -203,8 +203,8 @@ Aurora is on SFP+ Port 0 (sfpp0). The AA target's defines are:
+   On the X310 front panel, SFP0 is the left/top SFP+ cage (the one also used by the 1G/10G Ethernet configurations as the primary port). SFP1 carries the 1 GigE management/data link in this configuration.         
+                                                           
+   The X310's default IP addresses are stored in EEPROM (not in the FPGA bitfile), with factory defaults:                                                                                                             
+-  - SFP0 (eth0): 192.168.10.2 (for Aurora on SFP1 use this for 1GigE)
+-  - SFP1 (eth1): 192.168.20.2 (for Aurora on SFP0 use this for 1GigE)
++  - SFP0 (eth0): 192.168.10.2 **(for Aurora on SFP1 use this for 1GigE)**
++  - SFP1 (eth1): 192.168.20.2 **(for Aurora on SFP0 use this for 1GigE)**
+                              
+   In the X310_AA configuration SFP0 is aurora (bypasses Ethernet entirely), so the 1 GigE interface is on SFP1 at 192.168.20.2. The host NIC should be set to 192.168.20.1/24.                                       
+                                                                                                                                                                                                                      
+-- 
+2.34.1
+

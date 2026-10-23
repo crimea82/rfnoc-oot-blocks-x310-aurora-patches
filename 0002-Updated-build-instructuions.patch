@@ -1,0 +1,58 @@
+From 2d087604ff8d1c42fb110de8f6771d9986df8800 Mon Sep 17 00:00:00 2001
+From: yuriy <crimea82@protonmail.com>
+Date: Sun, 3 May 2026 19:40:22 -0400
+Subject: [PATCH 2/9] Updated build instructuions
+
+---
+ README.md | 38 ++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 38 insertions(+)
+
+diff --git a/README.md b/README.md
+index 9161516..0ae59b4 100644
+--- a/README.md
++++ b/README.md
+@@ -154,3 +154,41 @@ rfnoc_image_builder -y ../icores/x410_X1_200_Aurora100Gbps_rfnoc_image_core.yml
+ In this workflow, we launch `rfnoc_image_builder` once with `-I` on the current
+ directory, and once without. In the latter case, the image builder will only
+ use files that were installed into the right location.
++
++___________________________________________________________________________________________________
++
++This build is using uhd 4.9.0.1 and the isntructions to build this Aurora image for X310 are as follows:
++
++Build and install UHD from the modified source to get the updated BSP files:                                                                                                                                       
++  cd /home/yuriy/test/uhd/host                              
++  mkdir -p build && cd build  
++  cmake ..                                                                                                                                                                                                           
++  make -j8
++  sudo cmake --install .                                                                                                                                                                                             
++                                                            
++  This installs the three files that rfnoc_image_builder always reads from the system path:
++  - /usr/local/bin/rfnoc_image_builder (X310_AA target)                                                                                                                                                              
++  - /usr/local/share/uhd/rfnoc/core/io_signatures.yml (x3xx_sfpp_aurora type)                                                                                                                                        
++  - /usr/local/share/uhd/rfnoc/core/x310_bsp.yml (sfpp0/sfpp1 ports)                                                                                                                                                 
++                                                                                                                                                                                                                     
++  Build the bitfile                                                                                                                                                                                                  
++                                                                                                                                                                                                                     
++  cd /home/yuriy/test/rfnoc-oot-blocks                                                                                                                                                                               
++                                                                                                                                                                                                                     
++  /usr/local/bin/rfnoc_image_builder \                      
++    -y icores/x310_Aurora_rfnoc_image_core.yml \
++    -t X310_AA \                                                                                                                                                                                                     
++    -I . \
++    -F /home/yuriy/test/uhd/fpga \                                                                                                                                                                                   
++    -p /tools/Xilinx/Vivado \                               
++    -j 8
++                                                                                                                                                                                                                     
++  The -F flag is required because the FPGA RTL files (x300.v, Makefile, viv_generate_ip.tcl, etc.) are not installed by cmake --install — cmake reports them as "Up-to-date" even though they contain our changes.   
++                                                                                                                                                                                                                     
++  Output                                                                                                                                                                                                             
++                                                            
++  Bitfiles appear in build/ relative to the working directory:                                                                                                                                                       
++  - build/usrp_x310_fpga_Aurora.bit
++  - build/usrp_x310_fpga_Aurora.bin                                                                                                                                                                                  
++  - build/usrp_x310_fpga_Aurora.lvbitx                      
++  - build/usrp_x310_fpga_Aurora.rpt
+-- 
+2.34.1
+

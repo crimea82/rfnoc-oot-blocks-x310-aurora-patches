@@ -1,0 +1,36 @@
+From c2263a8d59bc3b0ca04a00b9e764e2a5e5bc3d4b Mon Sep 17 00:00:00 2001
+From: yuriy <crimea82@protonmail.com>
+Date: Sun, 10 May 2026 16:08:19 -0400
+Subject: [PATCH 7/9] Updated isntructions in readme
+
+---
+ README.md | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/README.md b/README.md
+index a4a4fc4..a41d741 100644
+--- a/README.md
++++ b/README.md
+@@ -186,7 +186,7 @@ Build and install UHD from the modified source to get the updated BSP files:
+                                                                                                                                                                                                                      
+   The -F flag is required because the FPGA RTL files (x300.v, Makefile, viv_generate_ip.tcl, etc.) are not installed by cmake --install — cmake reports them as "Up-to-date" even though they contain our changes.   
+                                                                                                                                                                                                                      
+-  Output                                                                                                                                                                                                             
++###  Output for Aurora on SFP0 build 
+                                                             
+   Bitfiles appear in build/ relative to the working directory:                                                                                                                                                       
+   - build/usrp_x310_fpga_Aurora.bit
+@@ -203,8 +203,8 @@ Aurora is on SFP+ Port 0 (sfpp0). The AA target's defines are:
+   On the X310 front panel, SFP0 is the left/top SFP+ cage (the one also used by the 1G/10G Ethernet configurations as the primary port). SFP1 carries the 1 GigE management/data link in this configuration.         
+                                                           
+   The X310's default IP addresses are stored in EEPROM (not in the FPGA bitfile), with factory defaults:                                                                                                             
+-  - SFP0 (eth0): 192.168.10.2                                                                                                                                                                                      
+-  - SFP1 (eth1): 192.168.20.2                                                                                                                                                                                        
++  - SFP0 (eth0): 192.168.10.2 (for Aurora on SFP1 use this for 1GigE)
++  - SFP1 (eth1): 192.168.20.2 (for Aurora on SFP0 use this for 1GigE)
+                              
+   In the X310_AA configuration SFP0 is aurora (bypasses Ethernet entirely), so the 1 GigE interface is on SFP1 at 192.168.20.2. The host NIC should be set to 192.168.20.1/24.                                       
+                                                                                                                                                                                                                      
+-- 
+2.34.1
+

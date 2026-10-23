@@ -1,0 +1,24 @@
+From c42d4bd90337b2fd9fed918dda6bdcee12297805 Mon Sep 17 00:00:00 2001
+From: yuriy <crimea82@protonmail.com>
+Date: Tue, 5 May 2026 20:48:24 -0400
+Subject: [PATCH 5/9] Updated build files to add x310 aurora example
+
+---
+ examples/CMakeLists.txt | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/examples/CMakeLists.txt b/examples/CMakeLists.txt
+index acf288d..5c5b4be 100644
+--- a/examples/CMakeLists.txt
++++ b/examples/CMakeLists.txt
+@@ -8,6 +8,7 @@ set(examples_sources_py
+     aurora_loopback_host.py
+     aurora_loopback_nullsrcsink.py
+     common.py
++    rx_to_aurora.py
+ )
+ 
+ # TODO: Properly shebang the Python files depending on platform
+-- 
+2.34.1
+

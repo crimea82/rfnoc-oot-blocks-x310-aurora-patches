@@ -1,0 +1,121 @@
+From 61d8ca7e3be7110e7a6b206e205eb1db73bbec98 Mon Sep 17 00:00:00 2001
+From: yuriy <crimea82@protonmail.com>
+Date: Sun, 10 May 2026 15:46:49 -0400
+Subject: [PATCH 6/9] Added build mode for Aurora on SFP1 and 1GigE on SFP0
+
+---
+ README.md                                | 17 ++++---
+ icores/CMakeLists.txt                    |  2 +
+ icores/x310_Aurora1_rfnoc_image_core.yml | 61 ++++++++++++++++++++++++
+ 3 files changed, 71 insertions(+), 9 deletions(-)
+ create mode 100644 icores/x310_Aurora1_rfnoc_image_core.yml
+
+diff --git a/README.md b/README.md
+index 8c36611..a4a4fc4 100644
+--- a/README.md
++++ b/README.md
+@@ -174,16 +174,15 @@ Build and install UHD from the modified source to get the updated BSP files:
+   - /usr/local/share/uhd/rfnoc/core/x310_bsp.yml (sfpp0/sfpp1 ports)                                                                                                                                                 
+                                                                                                                                                                                                                      
+   Build the bitfile                                                                                                                                                                                                  
+-                                                                                                                                                                                                                     
++
++  Run the following commands replacing paths to the paths on your system 
++                                                                
+   cd /home/yuriy/test/rfnoc-oot-blocks                                                                                                                                                                               
+-                                                                                                                                                                                                                     
+-  /usr/local/bin/rfnoc_image_builder \                      
+-    -y icores/x310_Aurora_rfnoc_image_core.yml \
+-    -t X310_AA \                                                                                                                                                                                                     
+-    -I . \
+-    -F /home/yuriy/test/uhd/fpga \                                                                                                                                                                                   
+-    -p /tools/Xilinx/Vivado \                               
+-    -j 8
++  For Aurora on SFP1 and 1GigE on SFP0 run this:
++  /usr/local/bin/rfnoc_image_builder -y icores/x310_Aurora1_rfnoc_image_core.yml -t X310_AA1 -I . -F /home/yuriy/test/uhd/fpga -C /home/yuriy/test/rfnoc-oot-blocks -p /tools/Xilinx/Vivado -j 8
++
++  For Aurora on SFP0 and 1GigE on SFP1 run this:
++  /usr/local/bin/rfnoc_image_builder -y icores/x310_Aurora_rfnoc_image_core.yml -t X310_AA -I . -F /home/yuriy/test/uhd/fpga -p /tools/Xilinx/Vivado -j 8
+                                                                                                                                                                                                                      
+   The -F flag is required because the FPGA RTL files (x300.v, Makefile, viv_generate_ip.tcl, etc.) are not installed by cmake --install — cmake reports them as "Up-to-date" even though they contain our changes.   
+                                                                                                                                                                                                                      
+diff --git a/icores/CMakeLists.txt b/icores/CMakeLists.txt
+index 1b22e53..9117956 100644
+--- a/icores/CMakeLists.txt
++++ b/icores/CMakeLists.txt
+@@ -6,3 +6,5 @@
+ 
+ RFNOC_REGISTER_IMAGE_CORE(SRC x410_200_2xAurora100Gbps_rfnoc_image_core.yml)
+ RFNOC_REGISTER_IMAGE_CORE(SRC x410_X1_200_Aurora100Gbps_rfnoc_image_core.yml)
++RFNOC_REGISTER_IMAGE_CORE(SRC x310_Aurora_rfnoc_image_core.yml)
++RFNOC_REGISTER_IMAGE_CORE(SRC x310_Aurora1_rfnoc_image_core.yml)
+diff --git a/icores/x310_Aurora1_rfnoc_image_core.yml b/icores/x310_Aurora1_rfnoc_image_core.yml
+new file mode 100644
+index 0000000..a510a5f
+--- /dev/null
++++ b/icores/x310_Aurora1_rfnoc_image_core.yml
+@@ -0,0 +1,61 @@
++# General parameters
++# -----------------------------------------
++schema: rfnoc_imagebuilder_args
++copyright: >-
++  Copyright 2025 Ettus Research, a National Instruments Brand
++license: >-
++  SPDX-License-Identifier: LGPL-3.0-or-later
++version: '1.0'
++chdr_width: 64
++device: 'x310'
++image_core_name: 'usrp_x310_fpga_Aurora1'
++default_target: 'X310_AA1'
++
++# Inherit the standard X310 radio infrastructure (radios, DDC/DUC, stream eps)
++inherit:
++  - 'yaml_include/x3xx_radio_base.yml'
++
++# NOTE: This image core is identical to x310_Aurora_rfnoc_image_core.yml except
++# that the Aurora block is connected to SFP+ Port 1 instead of Port 0.
++# The corresponding build target is X310_AA1:
++#   SFP0 = 1GigE (management / UHD control, default IP 192.168.10.2)
++#   SFP1 = RFNoC OOT Aurora (GT PHY inside rfnoc_image_core)
++
++# Stream endpoints
++# ----------------------------------------
++# ep0-ep3 are defined by x3xx_radio_base.yml (radio channels)
++# ep4-ep5 are for the Aurora block
++stream_endpoints:
++  ep4:
++    buff_size: 65536
++    ctrl: False
++    data: True
++  ep5:
++    buff_size: 65536
++    ctrl: False
++    data: True
++
++# NoC blocks
++# ----------------------------------
++noc_blocks:
++  aurora0:
++    block_desc: 'aurora_x310.yml'
++    parameters:
++      NUM_PORTS: 2
++      SFPP_NUM:  1
++
++# Connections
++# ------------------------------------------
++connections:
++  # Aurora data connections
++  - { srcblk: ep4,     srcport: out0,   dstblk: aurora0, dstport: in_0  }
++  - { srcblk: aurora0, srcport: out_0,  dstblk: ep4,     dstport: in0   }
++  - { srcblk: ep5,     srcport: out0,   dstblk: aurora0, dstport: in_1  }
++  - { srcblk: aurora0, srcport: out_1,  dstblk: ep5,     dstport: in0   }
++
++  # Aurora physical interface — connects to SFP+ 1
++  # Requires sfpp1 device io_port to be defined in x310_bsp.yml
++  - { srcblk: aurora0, srcport: sfpp,   dstblk: _device_, dstport: sfpp1 }
++
++  # BSP connections (from x3xx_radio_base.yml)
++  - { srcblk: _device_, srcport: _none_, dstblk: _device_, dstport: fp_gpio }
+-- 
+2.34.1
+

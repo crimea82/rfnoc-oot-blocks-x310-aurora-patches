@@ -1,0 +1,54 @@
+From 01453ce67a9b8553afb454f35c6e94e2e15b4f9e Mon Sep 17 00:00:00 2001
+From: yuriy <crimea82@protonmail.com>
+Date: Thu, 22 Oct 2026 19:59:55 -0400
+Subject: [PATCH 9/9] Update UHD version references from 4.9 to 4.10.0.0
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+---
+ CMakeLists.txt                                     | 2 +-
+ README.md                                          | 2 +-
+ rfnoc/fpga/oot-blocks/rfnoc_block_aurora/README.md | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 59c5f91..a2070f3 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -49,7 +49,7 @@ endif()
+ ###########################################################################
+ # Find UHD
+ ###########################################################################
+-find_package(UHD 4.9)
++find_package(UHD 4.10)
+ if(UHD_FOUND)
+     message(STATUS "Found UHD:")
+     message(STATUS " * Version: ${UHD_VERSION}")
+diff --git a/README.md b/README.md
+index 10c6c09..84edd0f 100644
+--- a/README.md
++++ b/README.md
+@@ -159,7 +159,7 @@ ________________________________________________________________________________
+ 
+ ## Updated build for X310 Aurora OOT block
+ 
+-This build is using uhd 4.9.0.1 and the isntructions to build this Aurora image for X310 are as follows:
++This build is using uhd 4.10.0.0 and the isntructions to build this Aurora image for X310 are as follows:
+ 
+ Build and install UHD from the modified source to get the updated BSP files:                                                                                                                                       
+   cd /home/yuriy/test/uhd/host                              
+diff --git a/rfnoc/fpga/oot-blocks/rfnoc_block_aurora/README.md b/rfnoc/fpga/oot-blocks/rfnoc_block_aurora/README.md
+index bd048d4..783112f 100644
+--- a/rfnoc/fpga/oot-blocks/rfnoc_block_aurora/README.md
++++ b/rfnoc/fpga/oot-blocks/rfnoc_block_aurora/README.md
+@@ -47,7 +47,7 @@ For more detailed information on the Aurora RFNoC block, please refer to the ful
+ > implementation on the remote compute node, which may require additional HDL expertise.
+ 
+ ### Pre-requisites
+-- **UHD Version**: Install UHD version 4.9 or later.
++- **UHD Version**: Install UHD version 4.10 or later.
+ - **FPGA Image**: The Aurora RFNoC block needs to be included in the FPGA image.
+   You can use the `rfnoc_image_builder` to build FPGA images from the following image core
+   .yml files:
+-- 
+2.34.1
+

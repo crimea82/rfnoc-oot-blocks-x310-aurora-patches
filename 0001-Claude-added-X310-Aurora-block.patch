@@ -1,0 +1,1474 @@
+From abaa151316703c5303e66fe3e98f3ac4107f0ce8 Mon Sep 17 00:00:00 2001
+From: yuriy <crimea82@protonmail.com>
+Date: Sun, 3 May 2026 16:41:12 -0400
+Subject: [PATCH 1/9] Claude added X310 Aurora block
+
+---
+ icores/x310_Aurora_rfnoc_image_core.yml       |  76 ++
+ icores/yaml_include/x3xx_radio_base.yml       | 119 +++
+ rfnoc/blocks/aurora_x310.yml                  | 103 +++
+ .../oot-blocks/ip/aurora_x310/Makefile.inc    |  63 ++
+ .../rfnoc_block_aurora/Makefile.srcs          |  13 +
+ .../rfnoc_block_aurora/aurora_x310_wrapper.sv | 241 ++++++
+ .../constraints/sfpp_aurora.xdc               |  36 +
+ .../rfnoc_block_aurora_x310.sv                | 747 ++++++++++++++++++
+ 8 files changed, 1398 insertions(+)
+ create mode 100644 icores/x310_Aurora_rfnoc_image_core.yml
+ create mode 100644 icores/yaml_include/x3xx_radio_base.yml
+ create mode 100644 rfnoc/blocks/aurora_x310.yml
+ create mode 100644 rfnoc/fpga/oot-blocks/ip/aurora_x310/Makefile.inc
+ create mode 100644 rfnoc/fpga/oot-blocks/rfnoc_block_aurora/aurora_x310_wrapper.sv
+ create mode 100644 rfnoc/fpga/oot-blocks/rfnoc_block_aurora/constraints/sfpp_aurora.xdc
+ create mode 100644 rfnoc/fpga/oot-blocks/rfnoc_block_aurora/rfnoc_block_aurora_x310.sv
+
+diff --git a/icores/x310_Aurora_rfnoc_image_core.yml b/icores/x310_Aurora_rfnoc_image_core.yml
+new file mode 100644
+index 0000000..e934984
+--- /dev/null
++++ b/icores/x310_Aurora_rfnoc_image_core.yml
+@@ -0,0 +1,76 @@
++# General parameters
++# -----------------------------------------
++schema: rfnoc_imagebuilder_args
++copyright: >-
++  Copyright 2025 Ettus Research, a National Instruments Brand
++license: >-
++  SPDX-License-Identifier: LGPL-3.0-or-later
++version: '1.0'
++chdr_width: 64
++device: 'x310'
++image_core_name: 'usrp_x310_fpga_Aurora'
++default_target: 'X310_AA'
++
++# Inherit the standard X310 radio infrastructure (radios, DDC/DUC, stream eps)
++inherit:
++  - 'yaml_include/x3xx_radio_base.yml'
++
++# NOTE: Building this image core requires the following additional changes
++# to the UHD X310 platform files.  These changes are outside the OOT repo:
++#
++# 1. Add sfpp0 / sfpp1 io_ports to x310_bsp.yml (see comment in aurora_x310.yml)
++#
++# 2. Expose the SFP+ aurora signals in x300_core.v / x300.v.  The generated
++#    rfnoc_image_core module will have ports like sfpp0_aurora_refclk_p etc.
++#    These need to be connected to the top-level SFP+ pins.  Example signals
++#    to add to x300_core.v:
++#
++#      input  wire  sfpp0_ref_clk_p,      // XG_CLK_p from x300.v
++#      input  wire  sfpp0_ref_clk_n,      // XG_CLK_n
++#      output wire  sfpp0_tx_p,           // SFP0_TX_p
++#      output wire  sfpp0_tx_n,           // SFP0_TX_n
++#      input  wire  sfpp0_rx_p,           // SFP0_RX_p
++#      input  wire  sfpp0_rx_n,           // SFP0_RX_n
++#
++# 3. When SFPP0 is used for aurora, disable the Ethernet transport on SFPP0
++#    (SFP0 is typically 10GbE in the HG image; the XG image uses both SFPs
++#    for 10GbE).
++
++# Stream endpoints
++# ----------------------------------------
++# ep0-ep3 are defined by x3xx_radio_base.yml (radio channels)
++# ep4-ep5 are for the Aurora block
++stream_endpoints:
++  ep4:
++    buff_size: 65536
++    ctrl: False
++    data: True
++  ep5:
++    buff_size: 65536
++    ctrl: False
++    data: True
++
++# NoC blocks
++# ----------------------------------
++noc_blocks:
++  aurora0:
++    block_desc: 'aurora_x310.yml'
++    parameters:
++      NUM_PORTS: 2
++      SFPP_NUM:  0
++
++# Connections
++# ------------------------------------------
++connections:
++  # Aurora data connections
++  - { srcblk: ep4,     srcport: out0,   dstblk: aurora0, dstport: in_0  }
++  - { srcblk: aurora0, srcport: out_0,  dstblk: ep4,     dstport: in0   }
++  - { srcblk: ep5,     srcport: out0,   dstblk: aurora0, dstport: in_1  }
++  - { srcblk: aurora0, srcport: out_1,  dstblk: ep5,     dstport: in0   }
++
++  # Aurora physical interface — connects to SFP+ 0
++  # Requires sfpp0 device io_port to be defined in x310_bsp.yml
++  - { srcblk: aurora0, srcport: sfpp,   dstblk: _device_, dstport: sfpp0 }
++
++  # BSP connections (from x3xx_radio_base.yml)
++  - { srcblk: _device_, srcport: _none_, dstblk: _device_, dstport: fp_gpio }
+diff --git a/icores/yaml_include/x3xx_radio_base.yml b/icores/yaml_include/x3xx_radio_base.yml
+new file mode 100644
+index 0000000..0cda4ad
+--- /dev/null
++++ b/icores/yaml_include/x3xx_radio_base.yml
+@@ -0,0 +1,119 @@
++# General parameters
++# -----------------------------------------
++schema: rfnoc_imagebuilder_args         # Identifier for the schema used to validate this file
++copyright: >-                           # Copyright information used in file headers
++  Copyright 2023 Ettus Research, a National Instruments Brand
++license: >-                             # License information used in file headers
++  SPDX-License-Identifier: LGPL-3.0-or-later
++version: '1.0'                          # File version
++chdr_width: 64                          # Bit width of the CHDR bus for this image
++
++# A list of all stream endpoints in design
++# ----------------------------------------
++stream_endpoints:
++  ep0:                                  # Stream endpoint name
++    ctrl: True                          # Endpoint passes control traffic
++    data: True                          # Endpoint passes data traffic
++    buff_size: 32768                    # Ingress buffer size for data
++  ep1:
++    ctrl: False
++    data: True
++    buff_size: 0
++  ep2:
++    ctrl: False
++    data: True
++    buff_size: 32768
++  ep3:
++    ctrl: False
++    data: True
++    buff_size: 0
++
++# A list of all NoC blocks in design
++# ----------------------------------
++noc_blocks:
++  duc0:                                 # NoC block name
++    block_desc: 'duc.yml'               # Block device descriptor file
++    parameters:
++      NUM_PORTS: 1
++  ddc0:
++    block_desc: 'ddc.yml'
++    parameters:
++      NUM_PORTS: 2
++  radio0:
++    block_desc: 'radio.yml'
++    parameters:
++      NUM_PORTS: 2
++      EN_COMP_GAIN_TX: 1
++      EN_COMP_GAIN_RX: 1      
++  duc1:
++    block_desc: 'duc.yml'
++    parameters:
++      NUM_PORTS: 1
++  ddc1:
++    block_desc: 'ddc.yml'
++    parameters:
++      NUM_PORTS: 2
++  radio1:
++    block_desc: 'radio.yml'
++    parameters:
++      NUM_PORTS: 2
++      EN_COMP_GAIN_TX: 1
++      EN_COMP_GAIN_RX: 1
++
++# A list of all static connections in design
++# ------------------------------------------
++# Format: A list of connection maps (list of key-value pairs) with the following keys
++#   - srcblk  = Source block to connect
++#   - srcport = Port on the source block to connect
++#   - dstblk  = Destination block to connect
++#   - dstport = Port on the destination block to connect
++connections:
++  # RF A TX
++  - { srcblk: ep0,    srcport: out0,  dstblk: duc0,   dstport: in_0 }
++  - { srcblk: duc0,   srcport: out_0, dstblk: radio0, dstport: in_0 }
++  # This is a fake connection: It signals to the image builder that we are
++  # deliberately not connecting this port, so it doesn't have to print a warning
++  # about it.
++  - { srcblk: _device_,  srcport: _none_, dstblk: radio0, dstport: in_1 }
++  # RF A RX
++  - { srcblk: radio0, srcport: out_0, dstblk: ddc0,   dstport: in_0 }
++  - { srcblk: ddc0,   srcport: out_0, dstblk: ep0,    dstport: in0  }
++  # RF A RX2
++  - { srcblk: radio0, srcport: out_1, dstblk: ddc0,   dstport: in_1 }
++  - { srcblk: ddc0,   srcport: out_1, dstblk: ep1,    dstport: in0  }
++  #
++  # RF B TX
++  - { srcblk: ep2,    srcport: out0,  dstblk: duc1,   dstport: in_0 }
++  - { srcblk: duc1,   srcport: out_0, dstblk: radio1, dstport: in_0 }
++  # See comment above about fake connections.
++  - { srcblk: _device_,  srcport: _none_, dstblk: radio1, dstport: in_1 }
++  # RF B RX
++  - { srcblk: radio1, srcport: out_0, dstblk: ddc1,   dstport: in_0 }
++  - { srcblk: ddc1,   srcport: out_0, dstblk: ep2,    dstport: in0  }
++  # RF B RX2
++  - { srcblk: radio1, srcport: out_1, dstblk: ddc1,   dstport: in_1 }
++  - { srcblk: ddc1,   srcport: out_1, dstblk: ep3,    dstport: in0  }
++  #
++  # BSP Connections
++  - { srcblk: radio0,   srcport: ctrlport, dstblk: _device_, dstport: ctrlport_radio0 }
++  - { srcblk: radio1,   srcport: ctrlport, dstblk: _device_, dstport: ctrlport_radio1 }
++  - { srcblk: _device_, srcport: radio0,   dstblk: radio0,   dstport: radio           }
++  - { srcblk: _device_, srcport: radio1,   dstblk: radio1,   dstport: radio           }
++  - { srcblk: _device_, srcport: time,     dstblk: radio0,   dstport: time            }
++  - { srcblk: _device_, srcport: time,     dstblk: radio1,   dstport: time            }
++
++# A list of all clock domain connections in design
++# ------------------------------------------------
++# Format: A list of connection maps (list of key-value pairs) with the following keys
++#   - srcblk  = Source block to connect (Always "_device"_)
++#   - srcport = Clock domain on the source block to connect
++#   - dstblk  = Destination block to connect
++#   - dstport = Clock domain on the destination block to connect
++clk_domains:
++    - { srcblk: _device_, srcport: radio, dstblk: radio0, dstport: radio }
++    - { srcblk: _device_, srcport: ce,    dstblk: ddc0,   dstport: ce    }
++    - { srcblk: _device_, srcport: ce,    dstblk: duc0,   dstport: ce    }
++    - { srcblk: _device_, srcport: radio, dstblk: radio1, dstport: radio }
++    - { srcblk: _device_, srcport: ce,    dstblk: ddc1,   dstport: ce    }
++    - { srcblk: _device_, srcport: ce,    dstblk: duc1,   dstport: ce    }
++
+diff --git a/rfnoc/blocks/aurora_x310.yml b/rfnoc/blocks/aurora_x310.yml
+new file mode 100644
+index 0000000..6a1ac98
+--- /dev/null
++++ b/rfnoc/blocks/aurora_x310.yml
+@@ -0,0 +1,103 @@
++schema: rfnoc_modtool_args
++module_name: aurora_x310
++version: "1.0"
++rfnoc_version: "1.0"
++chdr_width: 64
++noc_id: 0xA404A000
++name: Aurora Interface Block (X310)
++description: |
++  Aurora 64B/66B single-lane (10 Gbps) RFNoC block for the USRP X310.
++  Uses an SFP+ port for the Aurora physical link.  Compatible with the
++  same software driver (aurora_block_control) as the X410 aurora block.
++
++parameters:
++  NUM_PORTS: 1
++  SFPP_NUM: 0
++
++clocks:
++  - name: rfnoc_chdr
++    freq: "[]"
++  - name: rfnoc_ctrl
++    freq: "[]"
++
++control:
++  fpga_iface: ctrlport
++  interface_direction: slave
++  fifo_depth: 32
++  clk_domain: rfnoc_chdr
++  ctrlport:
++    byte_mode: False
++    timed: False
++    has_status: False
++
++data:
++  fpga_iface: axis_chdr
++  clk_domain: rfnoc_chdr
++  inputs:
++    in:
++      num_ports: NUM_PORTS
++  outputs:
++    out:
++      num_ports: NUM_PORTS
++
++io_ports:
++  # Physical SFP+ aurora connection.
++  # The X310 BSP must expose a matching sfpp0 / sfpp1 device io_port of
++  # type x3xx_sfpp_aurora.  Add the following to x310_bsp.yml and wire
++  # the signals in x300_core.v / x300.v:
++  #
++  #   sfpp0:
++  #     type: x3xx_sfpp_aurora
++  #     drive: slave
++  #     rename:
++  #       pattern: (.*)
++  #       repl: sfpp0_aurora_\1
++  #   sfpp1:
++  #     type: x3xx_sfpp_aurora
++  #     drive: slave
++  #     rename:
++  #       pattern: (.*)
++  #       repl: sfpp1_aurora_\1
++  sfpp:
++    type: x3xx_sfpp_aurora
++    drive: master
++
++constraints:
++  - fpga/oot-blocks/rfnoc_block_aurora/constraints/sfpp_aurora.xdc
++
++fpga_includes:
++  - include: "fpga/oot-blocks/rfnoc_block_aurora/Makefile.srcs"
++    make_var: "$(RFNOC_BLOCK_AURORA_X310_SRCS)"
++  - include: "fpga/oot-blocks/ip/aurora_x310/Makefile.inc"
++    make_var: "$(IP_AURORA_X310_SRCS) $(AURORA_X310_PHY_SRCS) $(IP_AURORA_X310_EXAMPLE_SRCS)"
++
++io_signatures:
++  x3xx_sfpp_aurora:
++    # X310 SFP+ Aurora physical interface.
++    # Connects the SFP+ GT pins and reference clock to the aurora block.
++    type: master-slave
++    ports:
++      - name: refclk_p
++        type: to-master
++        width: 1
++      - name: refclk_n
++        type: to-master
++        width: 1
++      - name: tx_p
++        type: from-master
++        width: 1
++      - name: tx_n
++        type: from-master
++        width: 1
++      - name: rx_p
++        type: to-master
++        width: 1
++      - name: rx_n
++        type: to-master
++        width: 1
++      - name: link_up
++        type: from-master
++        width: 1
++      - name: activity
++        type: from-master
++        width: 1
+diff --git a/rfnoc/fpga/oot-blocks/ip/aurora_x310/Makefile.inc b/rfnoc/fpga/oot-blocks/ip/aurora_x310/Makefile.inc
+new file mode 100644
+index 0000000..fe72460
+--- /dev/null
++++ b/rfnoc/fpga/oot-blocks/ip/aurora_x310/Makefile.inc
+@@ -0,0 +1,63 @@
++#
++# Copyright 2025 Ettus Research, a National Instruments Brand
++#
++# SPDX-License-Identifier: LGPL-3.0-or-later
++#
++# Build rules for the aurora_64b66b_pcs_pma Vivado IP and its PHY/MAC wrapper
++# sources used by the aurora_x310_wrapper module.
++#
++# The XCI and wrapper RTL are taken directly from the UHD X300 IP directory
++# ($(UHD_FPGA_DIR)/usrp3/top/x300/ip/aurora_64b66b_pcs_pma/) to avoid
++# duplicating large generated files in this repository.
++#
++# Required build variables:
++#   IP_DIR        : x300 IP directory ($(abspath ./ip) from Makefile.x300.inc)
++#   TOOLS_DIR     : Root of the UHD tools directory (for viv_ip_builder.mak)
++#   IP_BUILD_DIR  : Output directory for generated IP products
++#   ARCH          : FPGA architecture (e.g. kintex7)
++#   PART_ID       : FPGA part identifier (e.g. xc7k410tffg900-2)
++#
++
++include $(TOOLS_DIR)/make/viv_ip_builder.mak
++
++X310_IP_DIR := $(IP_DIR)
++
++# -----------------------------------------------------------------------
++# PHY / MAC RTL wrapper sources (from UHD X300 directory)
++# -----------------------------------------------------------------------
++# These are hand-written RTL files that wrap the Vivado-generated IP.
++# They are compiled alongside the generated netlist.
++
++AURORA_X310_PHY_SRCS := \
++$(X310_IP_DIR)/aurora_64b66b_pcs_pma/aurora_phy_x1.v \
++$(X310_IP_DIR)/aurora_64b66b_pcs_pma/aurora_phy_clk_gen.v
++
++# -----------------------------------------------------------------------
++# Example-design sources generated by Vivado for the IP
++# -----------------------------------------------------------------------
++# aurora_64b66b_pcs_pma_gt_common_wrapper and shared-logic modules are
++# produced in the _ex/ sub-directory during IP generation.
++
++IP_AURORA_X310_EXAMPLE_SRCS = $(addprefix $(IP_BUILD_DIR)/aurora_64b66b_pcs_pma_ex/, \
++aurora_64b66b_pcs_pma_ex.srcs/shared_logic/aurora_64b66b_pcs_pma_clock_module.v \
++aurora_64b66b_pcs_pma_ex.srcs/shared_logic/aurora_64b66b_pcs_pma_gt_common_wrapper.v \
++aurora_64b66b_pcs_pma_ex.srcs/shared_logic/aurora_64b66b_pcs_pma_support_reset_logic.v \
++aurora_64b66b_pcs_pma_ex.srcs/shared_logic/aurora_64b66b_pcs_pma_support.v \
++)
++
++# -----------------------------------------------------------------------
++# Vivado IP XCI / output targets
++# -----------------------------------------------------------------------
++
++IP_AURORA_X310_SRCS := $(IP_BUILD_DIR)/aurora_64b66b_pcs_pma/aurora_64b66b_pcs_pma.xci
++
++IP_AURORA_X310_OUTS := $(addprefix $(IP_BUILD_DIR)/aurora_64b66b_pcs_pma/, \
++aurora_64b66b_pcs_pma.xci.out \
++)
++
++.INTERMEDIATE: IP_AURORA_X310_TRGT
++$(IP_AURORA_X310_SRCS) $(IP_AURORA_X310_OUTS) $(IP_AURORA_X310_EXAMPLE_SRCS) : IP_AURORA_X310_TRGT
++	@:
++
++IP_AURORA_X310_TRGT: $(X310_IP_DIR)/aurora_64b66b_pcs_pma/aurora_64b66b_pcs_pma.xci
++	$(call BUILD_VIVADO_IP,aurora_64b66b_pcs_pma,$(ARCH),$(PART_ID),$(X310_IP_DIR),$(IP_BUILD_DIR),1)
+diff --git a/rfnoc/fpga/oot-blocks/rfnoc_block_aurora/Makefile.srcs b/rfnoc/fpga/oot-blocks/rfnoc_block_aurora/Makefile.srcs
+index 6353036..4542f17 100644
+--- a/rfnoc/fpga/oot-blocks/rfnoc_block_aurora/Makefile.srcs
++++ b/rfnoc/fpga/oot-blocks/rfnoc_block_aurora/Makefile.srcs
+@@ -27,3 +27,16 @@ aurora_tx_control.sv \
+ noc_shell_aurora.sv \
+ rfnoc_block_aurora.sv \
+ )
++
++# X310 aurora block — shares all common files above except aurora_wrapper.sv
++# and rfnoc_block_aurora.sv which are replaced by the x310-specific versions.
++RFNOC_BLOCK_AURORA_X310_SRCS := $(addprefix $(dir $(abspath $(lastword $(MAKEFILE_LIST)))), \
++aurora_flow_control.sv \
++aurora_regs_pkg.sv \
++aurora_rx_datapath.sv \
++aurora_tx_datapath.sv \
++aurora_tx_control.sv \
++noc_shell_aurora.sv \
++aurora_x310_wrapper.sv \
++rfnoc_block_aurora_x310.sv \
++)
+diff --git a/rfnoc/fpga/oot-blocks/rfnoc_block_aurora/aurora_x310_wrapper.sv b/rfnoc/fpga/oot-blocks/rfnoc_block_aurora/aurora_x310_wrapper.sv
+new file mode 100644
+index 0000000..0edcb47
+--- /dev/null
++++ b/rfnoc/fpga/oot-blocks/rfnoc_block_aurora/aurora_x310_wrapper.sv
+@@ -0,0 +1,241 @@
++//
++// Copyright 2025 Ettus Research, a National Instruments Brand
++//
++// SPDX-License-Identifier: LGPL-3.0-or-later
++//
++// Module: aurora_x310_wrapper
++//
++// Description:
++//
++//   Wrapper for the Aurora 64B/66B single-lane PHY used on the USRP X310.
++//   Instantiates aurora_phy_clk_gen (IBUFDS_GTE2 + init_clk divider),
++//   aurora_phy_x1 (Xilinx Aurora 64B/66B IP), and adds packet framing via
++//   axi_add_preamble / axi_strip_preamble so that the interface presents
++//   standard AXI4-Stream with tlast (as expected by aurora_rx_datapath /
++//   aurora_tx_datapath).
++//
++//   The preamble framing format is identical to the one used by aurora_axis_mac
++//   in the UHD X300 firmware:
++//     [preamble: 0x9E6774129E677412] [data words] [EOP: 0x2A1D632F2A1D632F] [CRC]
++//
++//   Because the aurora_64b66b_pcs_pma IP RX interface has no backpressure
++//   (no m_axis_tready), an ingress FIFO is inserted between the PHY and the
++//   strip-preamble framer.  If the FIFO overflows, incoming data is silently
++//   dropped.  Size the FIFO to hold at least one maximum-sized CHDR packet
++//   (1024 words default for MTU=10) plus framing overhead.
++//
++//   Native Flow Control (NFC) is not supported; the s_axi_nfc_tready output
++//   is driven high so upstream flow_control NFC requests are silently accepted
++//   without sending NFC frames.
++//
++//   Hardware CRC is not exposed: crc_pass_fail_n and crc_valid are not
++//   present on this wrapper.  The axi_strip_preamble module has its own
++//   internal checksum; packets that fail its checksum are dropped internally.
++//   The caller should tie crc_pass=1'b1 and crc_valid=1'b0 in the parent
++//   module so that aurora_flow_control does not perform CRC-based filtering.
++//
++// Parameters:
++//
++//   SIMULATION : Set to 1 for simulation to enable faster reset timing.
++//   RX_FIFO_SIZE : Log2 of the ingress FIFO depth (entries).  Must be
++//                  large enough for at least one maximum-sized packet.
++//
++
++`default_nettype none
++
++
++module aurora_x310_wrapper #(
++  parameter bit SIMULATION   = 0,
++  parameter int RX_FIFO_SIZE = 11    // 2048 entries
++) (
++  // TX AXI4-S Interface (user_clk domain)
++  input  wire  [63:0] s_axi_tx_tdata,
++  input  wire         s_axi_tx_tlast,
++  input  wire         s_axi_tx_tvalid,
++  output wire         s_axi_tx_tready,
++
++  // RX AXI4-S Interface (user_clk domain)
++  output wire  [63:0] m_axi_rx_tdata,
++  output wire         m_axi_rx_tlast,
++  output wire         m_axi_rx_tvalid,
++  input  wire         m_axi_rx_tready,
++
++  // Native Flow Control Interface (NFC) — not supported; accepted and ignored
++  input  wire         s_axi_nfc_tvalid,
++  input  wire  [15:0] s_axi_nfc_tdata,
++  output wire         s_axi_nfc_tready,
++
++  // GTX Serial I/O (SFP+)
++  input  wire         rxp,
++  input  wire         rxn,
++  output wire         txp,
++  output wire         txn,
++
++  // GTX Reference Clock (differential LVDS)
++  input  wire         refclk_p,
++  input  wire         refclk_n,
++
++  // Error Indicators (user_clk domain)
++  output wire         hard_err,
++  output wire         soft_err,
++  output wire         channel_up,
++
++  // Asynchronous reset (active high).  Drives aurora_phy_x1 areset.
++  input  wire         areset,
++
++  // Clock outputs
++  output wire         user_clk
++);
++
++
++  //---------------------------------------------------------------------------
++  // Clock Generation
++  //---------------------------------------------------------------------------
++  // aurora_phy_clk_gen converts the differential reference clock to a
++  // single-ended clock for the Aurora IP and generates the init_clk
++  // (= refclk / 2) used for Aurora initialization.
++
++  wire refclk_se;
++  wire init_clk_i;
++
++  aurora_phy_clk_gen aurora_phy_clk_gen_i (
++    .areset   (areset     ),
++    .refclk_p (refclk_p   ),
++    .refclk_n (refclk_n   ),
++    .refclk   (refclk_se  ),
++    .clk156   (           ),
++    .init_clk (init_clk_i )
++  );
++
++
++  //---------------------------------------------------------------------------
++  // Aurora PHY
++  //---------------------------------------------------------------------------
++
++  wire        phy_rx_tvalid;
++  wire [63:0] phy_rx_tdata;
++
++  wire        phy_tx_tvalid;
++  wire        phy_tx_tready;
++  wire [63:0] phy_tx_tdata;
++
++  wire user_rst_i;
++
++  aurora_phy_x1 #(
++    .SIMULATION(SIMULATION)
++  ) aurora_phy_x1_i (
++    .areset     (areset      ),
++    .refclk     (refclk_se   ),
++    .init_clk   (init_clk_i  ),
++    .user_clk   (user_clk    ),
++    .user_rst   (user_rst_i  ),
++    .rx_p       (rxp         ),
++    .rx_n       (rxn         ),
++    .tx_p       (txp         ),
++    .tx_n       (txn         ),
++    .s_axis_tdata  (phy_tx_tdata ),
++    .s_axis_tvalid (phy_tx_tvalid),
++    .s_axis_tready (phy_tx_tready),
++    .m_axis_tdata  (phy_rx_tdata ),
++    .m_axis_tvalid (phy_rx_tvalid),
++    // AXI4-Lite config — not used; tie off
++    .s_axi_awaddr  (32'h0), .s_axi_araddr  (32'h0),
++    .s_axi_wdata   (32'h0), .s_axi_wstrb   (4'h0 ),
++    .s_axi_awvalid (1'b0 ), .s_axi_rready  (1'b1 ),
++    .s_axi_rdata   (     ), .s_axi_awready (     ),
++    .s_axi_wready  (     ), .s_axi_bvalid  (     ),
++    .s_axi_bresp   (     ), .s_axi_rresp   (     ),
++    .s_axi_bready  (1'b1 ), .s_axi_arready (     ),
++    .s_axi_rvalid  (     ), .s_axi_arvalid (1'b0 ),
++    .s_axi_wvalid  (1'b0 ),
++    .channel_up (channel_up ),
++    .hard_err   (hard_err   ),
++    .soft_err   (soft_err   )
++  );
++
++
++  //---------------------------------------------------------------------------
++  // TX Datapath — add preamble framing
++  //---------------------------------------------------------------------------
++  // axi_add_preamble wraps each CHDR packet with a preamble word, an EOP
++  // word, and a CRC word before handing it to the raw aurora PHY stream.
++
++  axi_add_preamble #(
++    .WIDTH(64)
++  ) axi_add_preamble_i (
++    .clk    (user_clk     ),
++    .reset  (user_rst_i   ),
++    .clear  (1'b0         ),
++    .i_tdata (s_axi_tx_tdata ),
++    .i_tlast (s_axi_tx_tlast ),
++    .i_tvalid(s_axi_tx_tvalid),
++    .i_tready(s_axi_tx_tready),
++    .o_tdata (phy_tx_tdata   ),
++    .o_tvalid(phy_tx_tvalid  ),
++    .o_tready(phy_tx_tready  )
++  );
++
++
++  //---------------------------------------------------------------------------
++  // RX Datapath — ingress FIFO + preamble strip
++  //---------------------------------------------------------------------------
++  // The aurora PHY RX interface has no backpressure signal, so we first sink
++  // data into an ingress FIFO.  axi_strip_preamble then reconstructs packet
++  // boundaries (tlast) by detecting the EOP sentinel word.
++
++  wire [63:0] fifo_rx_tdata;
++  wire        fifo_rx_tvalid;
++  wire        fifo_rx_tready;
++
++  axi_fifo #(
++    .WIDTH(64),
++    .SIZE (RX_FIFO_SIZE)
++  ) rx_ingress_fifo_i (
++    .clk      (user_clk     ),
++    .reset    (user_rst_i   ),
++    .clear    (1'b0         ),
++    .i_tdata  (phy_rx_tdata ),
++    .i_tvalid (phy_rx_tvalid),
++    .i_tready (             ),  // no backpressure from PHY — data dropped if full
++    .o_tdata  (fifo_rx_tdata ),
++    .o_tvalid (fifo_rx_tvalid),
++    .o_tready (fifo_rx_tready),
++    .space    (             ),
++    .occupied (             )
++  );
++
++  axi_strip_preamble #(
++    .WIDTH       (64  ),
++    .MAX_PKT_SIZE(2048)
++  ) axi_strip_preamble_i (
++    .clk    (user_clk      ),
++    .reset  (user_rst_i    ),
++    .clear  (1'b0          ),
++    .i_tdata (fifo_rx_tdata ),
++    .i_tvalid(fifo_rx_tvalid),
++    .i_tready(fifo_rx_tready),
++    .o_tdata (m_axi_rx_tdata ),
++    .o_tlast (m_axi_rx_tlast ),
++    .o_tvalid(m_axi_rx_tvalid),
++    .o_tready(m_axi_rx_tready),
++    .pkt_dropped(            ),
++    .crc_err    (            ),
++    .crit_error (            )
++  );
++
++
++  //---------------------------------------------------------------------------
++  // NFC Tie-Off
++  //---------------------------------------------------------------------------
++  // NFC is not supported on the aurora_64b66b single-lane IP in the current
++  // configuration.  Accept NFC requests silently so the flow_control module
++  // does not stall.  The nfc_tvalid / nfc_tdata inputs are intentionally
++  // ignored (Vivado will issue an info-level message, not a warning/error).
++
++  assign s_axi_nfc_tready = 1'b1;
++
++
++endmodule : aurora_x310_wrapper
++
++
++`default_nettype wire
+diff --git a/rfnoc/fpga/oot-blocks/rfnoc_block_aurora/constraints/sfpp_aurora.xdc b/rfnoc/fpga/oot-blocks/rfnoc_block_aurora/constraints/sfpp_aurora.xdc
+new file mode 100644
+index 0000000..fb2cced
+--- /dev/null
++++ b/rfnoc/fpga/oot-blocks/rfnoc_block_aurora/constraints/sfpp_aurora.xdc
+@@ -0,0 +1,36 @@
++#
++# Copyright 2025 Ettus Research, a National Instruments Brand
++#
++# SPDX-License-Identifier: LGPL-3.0-or-later
++#
++# Description:
++#
++#   Aurora timing constraints for SFP+ ports on the USRP X310.
++#
++#   Pin assignments for SFPP0 and SFPP1 are provided by the UHD X310
++#   platform XDC files (x300.xdc) and are not repeated here.
++#
++#   This file only defines timing constraints needed by the Aurora IP.
++#   The clock name AUR_CLK matches the one created by x300_aurora.xdc.
++#   Adjust if using a different X310 build.
++#
++
++# Reference clock for aurora_phy_clk_gen (156.25 MHz -> 6.4 ns period)
++# This constraint is platform-supplied; include x300_aurora.xdc or define:
++#   create_clock -name AUR_CLK -period 6.400 [get_ports XG_CLK_p]
++
++# Aurora init_clk is derived from AUR_CLK / 2 inside aurora_phy_clk_gen.
++# Declare it as generated if not already done by the platform:
++#   create_generated_clock -name aurora_init_clk \
++#     [get_pins -hierarchical -filter \
++#       {NAME =~ "*aurora_phy_clk_gen_i/dclk_divide_by_2_buf/O"}]
++
++# The bus_clk and aurora user_clk are asynchronous.
++# Adjust the group names to match those used in the base platform XDC.
++set_clock_groups -asynchronous \
++  -group [get_clocks -quiet bus_clk] \
++  -group [get_clocks -quiet -include_generated_clocks AUR_CLK]
++
++# False path for CDC resets inside the Aurora IP
++set_false_path -to [get_pins -quiet -hierarchical \
++  -filter {NAME =~ "*aurora_x310_wrapper_i/*/*cdc_to_reg*/D"}]
+diff --git a/rfnoc/fpga/oot-blocks/rfnoc_block_aurora/rfnoc_block_aurora_x310.sv b/rfnoc/fpga/oot-blocks/rfnoc_block_aurora/rfnoc_block_aurora_x310.sv
+new file mode 100644
+index 0000000..e04edb0
+--- /dev/null
++++ b/rfnoc/fpga/oot-blocks/rfnoc_block_aurora/rfnoc_block_aurora_x310.sv
+@@ -0,0 +1,747 @@
++//
++// Copyright 2025 Ettus Research, a National Instruments Brand
++//
++// SPDX-License-Identifier: LGPL-3.0-or-later
++//
++// Module: rfnoc_block_aurora_x310
++//
++// Description:
++//
++//   RFNoC block for Aurora communication over a single SFP+ lane on the
++//   USRP X310.  Functionally equivalent to rfnoc_block_aurora (the X410
++//   version) but adapted for:
++//
++//   * Single-lane 10 Gbps Aurora using the aurora_64b66b_pcs_pma Xilinx IP
++//     (Kintex-7 / 7-series GT, IBUFDS_GTE2)
++//   * 64-bit Aurora bus width (AURORA_W = 64), matching the IP data width
++//   * Preamble/EOP packet framing (aurora_phy_x1 has no native tlast)
++//   * No Native Flow Control (NFC) — remote-side throttling not available
++//   * Simplified module interface: no X4xx transport-adapter ports
++//     (no AXI-Lite, no AXI DMA, no device_id)
++//
++//   The block still reuses the same register map, software driver
++//   (aurora_block_control), and NOC_ID as the X410 version for software
++//   compatibility.
++//
++// Parameters:
++//
++//   THIS_PORTID         : Control crossbar port to which this block is
++//                         connected.
++//   CHDR_W              : AXIS-CHDR data bus width (must be 64 for X310).
++//   MTU                 : Log2 of maximum transmission unit.
++//   NUM_PORTS           : Number of RFNoC channels. With AURORA_W=CHDR_W=64
++//                         the aurora link can carry multiple channels but
++//                         with reduced per-channel bandwidth.
++//   SFPP_NUM            : Which SFP+ port (0 or 1) is used.  Informational
++//                         only; used in port_info output.
++//   EN_TX_CONTROL       : Include the TX control logic when 1.
++//   TS_QUEUE_DEPTH_LOG2 : Log2 of the timestamp queue depth in TX control.
++//   SIMULATION          : Set to 1 for faster simulation of Aurora IP.
++//
++
++`default_nettype none
++
++
++module rfnoc_block_aurora_x310 #(
++  logic [9:0] THIS_PORTID         = 10'd0,
++  int         CHDR_W              = 64,
++  logic [5:0] MTU                 = 6'd10,
++  int         NUM_PORTS           = 1,
++  int         SFPP_NUM            = 0,
++  bit         EN_TX_CONTROL       = 1,
++  int         TS_QUEUE_DEPTH_LOG2 = 5,
++  bit         SIMULATION          = 0
++) (
++  // RFNoC Framework Clocks and Resets
++  input  wire rfnoc_chdr_clk,
++  input  wire rfnoc_ctrl_clk,
++
++  // RFNoC Backend Interface
++  input  wire [511:0] rfnoc_core_config,
++  output wire [511:0] rfnoc_core_status,
++
++  //-----------------------------------
++  // SFP+ Aurora Physical Interface
++  //-----------------------------------
++
++  // Reference clock — differential LVDS input (e.g. 156.25 MHz for 10G)
++  input  wire refclk_p,
++  input  wire refclk_n,
++
++  // GT Serial I/O
++  output wire tx_p,
++  output wire tx_n,
++  input  wire rx_p,
++  input  wire rx_n,
++
++  // Link and activity indicators (asynchronous)
++  output wire link_up,
++  output wire activity,
++
++  //-----------------------------------
++  // RFNoC Data Interface
++  //-----------------------------------
++
++  // AXIS-CHDR Input Ports (from framework)
++  input  wire [CHDR_W*NUM_PORTS-1:0] s_rfnoc_chdr_tdata,
++  input  wire [       NUM_PORTS-1:0] s_rfnoc_chdr_tlast,
++  input  wire [       NUM_PORTS-1:0] s_rfnoc_chdr_tvalid,
++  output wire [       NUM_PORTS-1:0] s_rfnoc_chdr_tready,
++
++  // AXIS-CHDR Output Ports (to framework)
++  output wire [CHDR_W*NUM_PORTS-1:0] m_rfnoc_chdr_tdata,
++  output wire [       NUM_PORTS-1:0] m_rfnoc_chdr_tlast,
++  output wire [       NUM_PORTS-1:0] m_rfnoc_chdr_tvalid,
++  input  wire [       NUM_PORTS-1:0] m_rfnoc_chdr_tready,
++
++  //-----------------------------------
++  // RFNoC Control Interface
++  //-----------------------------------
++
++  // AXIS-Ctrl Input Port (from framework)
++  input  wire [31:0] s_rfnoc_ctrl_tdata,
++  input  wire        s_rfnoc_ctrl_tlast,
++  input  wire        s_rfnoc_ctrl_tvalid,
++  output wire        s_rfnoc_ctrl_tready,
++
++  // AXIS-Ctrl Output Port (to framework)
++  output wire [31:0] m_rfnoc_ctrl_tdata,
++  output wire        m_rfnoc_ctrl_tlast,
++  output wire        m_rfnoc_ctrl_tvalid,
++  input  wire        m_rfnoc_ctrl_tready
++);
++
++`ifdef MODEL_TECH
++  `include "usrp_utils.svh"
++`else
++  `include `"`UHD_FPGA_DIR/usrp3/lib/control/usrp_utils.svh`"
++`endif
++
++  import ctrlport_pkg::*;
++  import rfnoc_chdr_utils_pkg::*;
++
++  import aurora_regs_pkg::*;
++
++  // The aurora_64b66b single-lane IP produces a 64-bit data bus.
++  localparam int AURORA_W  = 64;
++  localparam int NUM_LANES = 1;
++  localparam int NUM_CORES = 1;
++
++  // MTU in Aurora-width words
++  localparam int AURORA_MTU = $clog2((2**MTU * (CHDR_W/8)) / (AURORA_W/8));
++
++  localparam [  REG_PAUSE_COUNT_LEN-1:0] DEF_NFC_PAUSE_COUNT   = 100;
++  localparam [ REG_PAUSE_THRESH_LEN-1:0] DEF_NFC_PAUSE_THRESH  = 160;
++  localparam [REG_RESUME_THRESH_LEN-1:0] DEF_NFC_RESUME_THRESH = 200;
++
++
++  //---------------------------------------------------------------------------
++  // Signal Declarations
++  //---------------------------------------------------------------------------
++
++  logic                       ctrlport_req_wr;
++  logic                       ctrlport_req_rd;
++  logic [CTRLPORT_ADDR_W-1:0] ctrlport_req_addr;
++  logic [CTRLPORT_DATA_W-1:0] ctrlport_req_data;
++  logic                       ctrlport_resp_ack;
++  logic [CTRLPORT_DATA_W-1:0] ctrlport_resp_data;
++
++  logic [NUM_PORTS-1:0][CHDR_W-1:0] in_noc_shell_tdata;
++  logic [NUM_PORTS-1:0][       0:0] in_noc_shell_tlast;
++  logic [NUM_PORTS-1:0][       0:0] in_noc_shell_tvalid;
++  logic [NUM_PORTS-1:0][       0:0] in_noc_shell_tready;
++
++  logic [NUM_PORTS-1:0][CHDR_W-1:0] out_noc_shell_tdata;
++  logic [NUM_PORTS-1:0][       0:0] out_noc_shell_tlast;
++  logic [NUM_PORTS-1:0][       0:0] out_noc_shell_tvalid;
++  logic [NUM_PORTS-1:0][       0:0] out_noc_shell_tready;
++
++
++  //---------------------------------------------------------------------------
++  // NoC Shell
++  //---------------------------------------------------------------------------
++
++  logic rfnoc_chdr_rst;
++
++  noc_shell_aurora #(
++    .CHDR_W     (CHDR_W     ),
++    .THIS_PORTID(THIS_PORTID),
++    .MTU        (MTU        ),
++    .NUM_PORTS  (NUM_PORTS  )
++  ) noc_shell_aurora_i (
++    .rfnoc_chdr_clk      (rfnoc_chdr_clk      ),
++    .rfnoc_ctrl_clk      (rfnoc_ctrl_clk      ),
++    .rfnoc_chdr_rst      (rfnoc_chdr_rst      ),
++    .rfnoc_ctrl_rst      (                    ),
++    .rfnoc_core_config   (rfnoc_core_config   ),
++    .rfnoc_core_status   (rfnoc_core_status   ),
++    .s_rfnoc_chdr_tdata  (s_rfnoc_chdr_tdata  ),
++    .s_rfnoc_chdr_tlast  (s_rfnoc_chdr_tlast  ),
++    .s_rfnoc_chdr_tvalid (s_rfnoc_chdr_tvalid ),
++    .s_rfnoc_chdr_tready (s_rfnoc_chdr_tready ),
++    .m_rfnoc_chdr_tdata  (m_rfnoc_chdr_tdata  ),
++    .m_rfnoc_chdr_tlast  (m_rfnoc_chdr_tlast  ),
++    .m_rfnoc_chdr_tvalid (m_rfnoc_chdr_tvalid ),
++    .m_rfnoc_chdr_tready (m_rfnoc_chdr_tready ),
++    .s_rfnoc_ctrl_tdata  (s_rfnoc_ctrl_tdata  ),
++    .s_rfnoc_ctrl_tlast  (s_rfnoc_ctrl_tlast  ),
++    .s_rfnoc_ctrl_tvalid (s_rfnoc_ctrl_tvalid ),
++    .s_rfnoc_ctrl_tready (s_rfnoc_ctrl_tready ),
++    .m_rfnoc_ctrl_tdata  (m_rfnoc_ctrl_tdata  ),
++    .m_rfnoc_ctrl_tlast  (m_rfnoc_ctrl_tlast  ),
++    .m_rfnoc_ctrl_tvalid (m_rfnoc_ctrl_tvalid ),
++    .m_rfnoc_ctrl_tready (m_rfnoc_ctrl_tready ),
++    .ctrlport_clk        (                    ),
++    .ctrlport_rst        (                    ),
++    .m_ctrlport_req_wr   (ctrlport_req_wr     ),
++    .m_ctrlport_req_rd   (ctrlport_req_rd     ),
++    .m_ctrlport_req_addr (ctrlport_req_addr   ),
++    .m_ctrlport_req_data (ctrlport_req_data   ),
++    .m_ctrlport_resp_ack (ctrlport_resp_ack   ),
++    .m_ctrlport_resp_data(ctrlport_resp_data  ),
++    .axis_chdr_clk       (                    ),
++    .axis_chdr_rst       (                    ),
++    .m_in_chdr_tdata     (in_noc_shell_tdata  ),
++    .m_in_chdr_tlast     (in_noc_shell_tlast  ),
++    .m_in_chdr_tvalid    (in_noc_shell_tvalid ),
++    .m_in_chdr_tready    (in_noc_shell_tready ),
++    .s_out_chdr_tdata    (out_noc_shell_tdata ),
++    .s_out_chdr_tlast    (out_noc_shell_tlast ),
++    .s_out_chdr_tvalid   (out_noc_shell_tvalid),
++    .s_out_chdr_tready   (out_noc_shell_tready)
++  );
++
++
++  //---------------------------------------------------------------------------
++  // CtrlPort Splitter
++  //---------------------------------------------------------------------------
++
++  logic                       core_ctrlport_req_wr;
++  logic                       core_ctrlport_req_rd;
++  logic [CTRLPORT_ADDR_W-1:0] core_ctrlport_req_addr;
++  logic [CTRLPORT_DATA_W-1:0] core_ctrlport_req_data;
++  logic                       core_ctrlport_resp_ack = 1'b0;
++  logic [CTRLPORT_DATA_W-1:0] core_ctrlport_resp_data;
++
++  logic [NUM_PORTS-1:0]                      chan_ctrlport_req_wr;
++  logic [NUM_PORTS-1:0]                      chan_ctrlport_req_rd;
++  logic [NUM_PORTS-1:0][CTRLPORT_ADDR_W-1:0] chan_ctrlport_req_addr;
++  logic [NUM_PORTS-1:0][CTRLPORT_DATA_W-1:0] chan_ctrlport_req_data;
++  logic [NUM_PORTS-1:0]                      chan_ctrlport_resp_ack;
++  logic [NUM_PORTS-1:0][CTRLPORT_DATA_W-1:0] chan_ctrlport_resp_data;
++
++  ctrlport_decoder #(
++    .NUM_SLAVES  (NUM_PORTS + 1     ),
++    .BASE_ADDR   (0                 ),
++    .SLAVE_ADDR_W(AURORA_CHAN_ADDR_W)
++  ) ctrlport_decoder_i (
++    .ctrlport_clk           (rfnoc_chdr_clk                                    ),
++    .ctrlport_rst           (rfnoc_chdr_rst                                    ),
++    .s_ctrlport_req_wr      (ctrlport_req_wr                                   ),
++    .s_ctrlport_req_rd      (ctrlport_req_rd                                   ),
++    .s_ctrlport_req_addr    (ctrlport_req_addr                                 ),
++    .s_ctrlport_req_data    (ctrlport_req_data                                 ),
++    .s_ctrlport_req_byte_en ('1                                                ),
++    .s_ctrlport_req_has_time('0                                                ),
++    .s_ctrlport_req_time    ('0                                                ),
++    .s_ctrlport_resp_ack    (ctrlport_resp_ack                                 ),
++    .s_ctrlport_resp_status (                                                  ),
++    .s_ctrlport_resp_data   (ctrlport_resp_data                                ),
++    .m_ctrlport_req_wr      ({chan_ctrlport_req_wr,    core_ctrlport_req_wr   }),
++    .m_ctrlport_req_rd      ({chan_ctrlport_req_rd,    core_ctrlport_req_rd   }),
++    .m_ctrlport_req_addr    ({chan_ctrlport_req_addr,  core_ctrlport_req_addr }),
++    .m_ctrlport_req_data    ({chan_ctrlport_req_data,  core_ctrlport_req_data }),
++    .m_ctrlport_req_byte_en (                                                  ),
++    .m_ctrlport_req_has_time(                                                  ),
++    .m_ctrlport_req_time    (                                                  ),
++    .m_ctrlport_resp_ack    ({chan_ctrlport_resp_ack,  core_ctrlport_resp_ack }),
++    .m_ctrlport_resp_status ('0                                                ),
++    .m_ctrlport_resp_data   ({chan_ctrlport_resp_data, core_ctrlport_resp_data})
++  );
++
++
++  //---------------------------------------------------------------------------
++  // Core Registers
++  //---------------------------------------------------------------------------
++
++  localparam logic [CTRLPORT_DATA_W-1:0] COMPAT_NUM = {16'h0001, 16'h0000};
++  localparam int COUNTER_W = CTRLPORT_DATA_W;
++
++  logic [NUM_LANES-1:0] r_aurora_lane_up;
++  logic                 r_aurora_link_up;
++  logic                 r_aurora_hard_err;
++  logic                 r_aurora_soft_err;
++  // mmcm_lock and pll_lock are not independently available on X310;
++  // we report user_clk availability through channel_up instead.
++  logic                 r_aurora_mmcm_lock;
++  logic                 r_aurora_pll_lock;
++  logic                 r_aurora_sw_rst    = 1'b1;
++  logic                 r_tx_datapath_rst  = 1'b1;
++  logic                 r_rx_datapath_rst  = 1'b1;
++
++  logic [REG_PAUSE_COUNT_LEN-1:0]  r_nfc_pause_count;
++  logic [REG_PAUSE_THRESH_LEN-1:0] r_nfc_pause_thresh;
++  logic [REG_RESUME_THRESH_LEN-1:0] r_nfc_resume_thresh;
++
++  logic [COUNTER_W-1:0] r_aurora_tx_pkt_ctr;
++  logic [COUNTER_W-1:0] r_aurora_rx_pkt_ctr;
++  logic [COUNTER_W-1:0] r_aurora_overflow_ctr;
++  logic [COUNTER_W-1:0] r_aurora_crc_err_ctr;
++
++  always_ff @(posedge rfnoc_chdr_clk) begin : aurora_core_regs
++    core_ctrlport_resp_ack  <= 1'b0;
++    core_ctrlport_resp_data <= 'hBAD_C0DE;
++    r_aurora_sw_rst         <= 1'b0;
++    r_tx_datapath_rst       <= 1'b0;
++    r_rx_datapath_rst       <= 1'b0;
++
++    if (core_ctrlport_req_rd) begin : read_case
++      core_ctrlport_resp_ack <= 1'b1;
++      case (core_ctrlport_req_addr[AURORA_CHAN_ADDR_W-1:0])
++        REG_COMPAT_ADDR : begin
++          core_ctrlport_resp_data <= COMPAT_NUM;
++        end
++        REG_CORE_CONFIG_ADDR : begin
++          core_ctrlport_resp_data <=
++            (REG_NUM_CORES_LEN'(NUM_CORES) << REG_NUM_CORES_POS) |
++            (REG_NUM_CHAN_LEN'(NUM_PORTS)  << REG_NUM_CHAN_POS  );
++        end
++        REG_CORE_STATUS_ADDR : begin
++          core_ctrlport_resp_data <=
++            (REG_LANE_STATUS_LEN'(r_aurora_lane_up) << REG_LANE_STATUS_POS) |
++            (r_aurora_link_up  << REG_LINK_STATUS_POS) |
++            (r_aurora_hard_err << REG_HARD_ERR_POS   ) |
++            (r_aurora_soft_err << REG_SOFT_ERR_POS   ) |
++            (r_aurora_mmcm_lock << REG_MMCM_LOCK_POS ) |
++            (r_aurora_pll_lock  << REG_PLL_LOCK_POS  );
++        end
++        REG_CORE_FC_PAUSE_ADDR : begin
++          core_ctrlport_resp_data <= CTRLPORT_DATA_W'(r_nfc_pause_count);
++        end
++        REG_CORE_FC_THRESHOLD_ADDR : begin
++          core_ctrlport_resp_data <=
++            (REG_PAUSE_THRESH_LEN'( r_nfc_pause_thresh) << REG_PAUSE_THRESH_POS ) |
++            (REG_RESUME_THRESH_LEN'(r_nfc_resume_thresh) << REG_RESUME_THRESH_POS);
++        end
++        REG_CORE_TX_PKT_CTR_ADDR : begin
++          core_ctrlport_resp_data <= CTRLPORT_DATA_W'(r_aurora_tx_pkt_ctr);
++        end
++        REG_CORE_RX_PKT_CTR_ADDR : begin
++          core_ctrlport_resp_data <= CTRLPORT_DATA_W'(r_aurora_rx_pkt_ctr);
++        end
++        REG_CORE_OVERFLOW_CTR_ADDR : begin
++          core_ctrlport_resp_data <= CTRLPORT_DATA_W'(r_aurora_overflow_ctr);
++        end
++        REG_CORE_CRC_ERR_CTR_ADDR : begin
++          core_ctrlport_resp_data <= CTRLPORT_DATA_W'(r_aurora_crc_err_ctr);
++        end
++      endcase
++    end : read_case
++
++    if (core_ctrlport_req_wr) begin : write_case
++      core_ctrlport_resp_ack <= 1'b1;
++      case (core_ctrlport_req_addr[AURORA_CHAN_ADDR_W-1:0])
++        REG_CORE_RESET_ADDR : begin
++          r_aurora_sw_rst   <= core_ctrlport_req_data[REG_AURORA_RESET_POS    ];
++          r_tx_datapath_rst <= core_ctrlport_req_data[REG_TX_DATAPATH_RESET_POS];
++          r_rx_datapath_rst <= core_ctrlport_req_data[REG_RX_DATAPATH_RESET_POS];
++        end
++        REG_CORE_FC_PAUSE_ADDR : begin
++          r_nfc_pause_count <=
++            core_ctrlport_req_data[REG_PAUSE_THRESH_POS+:REG_PAUSE_COUNT_LEN];
++        end
++        REG_CORE_FC_THRESHOLD_ADDR : begin
++          r_nfc_pause_thresh <=
++            core_ctrlport_req_data[REG_PAUSE_THRESH_POS +:REG_PAUSE_THRESH_LEN ];
++          r_nfc_resume_thresh <=
++            core_ctrlport_req_data[REG_RESUME_THRESH_POS+:REG_RESUME_THRESH_LEN];
++        end
++      endcase
++    end : write_case
++
++    if (rfnoc_chdr_rst) begin
++      core_ctrlport_resp_ack  <= 1'b0;
++      core_ctrlport_resp_data <= 'X;
++      r_aurora_sw_rst         <= 1'b1;
++      r_tx_datapath_rst       <= 1'b1;
++      r_rx_datapath_rst       <= 1'b1;
++      r_nfc_pause_count       <= DEF_NFC_PAUSE_COUNT;
++      r_nfc_pause_thresh      <= DEF_NFC_PAUSE_THRESH;
++      r_nfc_resume_thresh     <= DEF_NFC_RESUME_THRESH;
++    end
++  end : aurora_core_regs
++
++
++  //---------------------------------------------------------------------------
++  // Aurora Clock Domain Reset
++  //---------------------------------------------------------------------------
++  // aurora_x310_wrapper drives user_clk.  The user_rst internal to the PHY
++  // wrapper only holds the preamble framing logic in reset; aurora_clk itself
++  // becomes valid when the PHY has completed initialization.  We keep
++  // aurora_rst asserted until channel_up is seen, which implies a working
++  // link and stable user_clk.
++
++  logic aurora_clk;
++  logic aurora_rst = 1'b1;
++  logic a_aurora_link_up;
++
++  always_ff @(posedge aurora_clk) begin
++    aurora_rst <= ~a_aurora_link_up;
++  end
++
++
++  //---------------------------------------------------------------------------
++  // Aurora Datapaths
++  //---------------------------------------------------------------------------
++
++  logic [AURORA_W-1:0] a_to_aurora_tdata;
++  logic                a_to_aurora_tlast;
++  logic                a_to_aurora_tvalid;
++  logic                a_to_aurora_tready;
++
++  logic [AURORA_W-1:0] a_from_aurora_tdata;
++  logic                a_from_aurora_tlast;
++  logic                a_from_aurora_tvalid;
++
++  logic [AURORA_W-1:0] a_from_fc_tdata;
++  logic                a_from_fc_tvalid;
++  logic                a_from_fc_tlast;
++  logic                a_from_fc_tready;
++
++  aurora_tx_datapath #(
++    .CHDR_W        (CHDR_W             ),
++    .NUM_PORTS     (NUM_PORTS          ),
++    .MTU           (MTU                ),
++    .AURORA_W      (AURORA_W           ),
++    .EN_TX_CONTROL (EN_TX_CONTROL      ),
++    .TS_QUEUE_DEPTH(TS_QUEUE_DEPTH_LOG2),
++    .CHANNEL_OFFSET(0                  ),
++    .BUFFER_SIZE   (MTU                )
++  ) aurora_tx_datapath_i (
++    .aurora_clk        (aurora_clk             ),
++    .aurora_rst        (aurora_rst             ),
++    .s_aurora_tdata    (a_from_fc_tdata        ),
++    .s_aurora_tvalid   (a_from_fc_tvalid       ),
++    .s_aurora_tlast    (a_from_fc_tlast        ),
++    .s_aurora_tready   (a_from_fc_tready       ),
++    .rfnoc_chdr_clk    (rfnoc_chdr_clk         ),
++    .rfnoc_chdr_rst    (r_tx_datapath_rst      ),
++    .m_rfnoc_tdata     (out_noc_shell_tdata    ),
++    .m_rfnoc_tvalid    (out_noc_shell_tvalid   ),
++    .m_rfnoc_tlast     (out_noc_shell_tlast    ),
++    .m_rfnoc_tready    (out_noc_shell_tready   ),
++    .ctrlport_req_wr   (chan_ctrlport_req_wr   ),
++    .ctrlport_req_rd   (chan_ctrlport_req_rd   ),
++    .ctrlport_req_addr (chan_ctrlport_req_addr ),
++    .ctrlport_req_data (chan_ctrlport_req_data ),
++    .ctrlport_resp_ack (chan_ctrlport_resp_ack ),
++    .ctrlport_resp_data(chan_ctrlport_resp_data)
++  );
++
++  aurora_rx_datapath #(
++    .CHDR_W        (CHDR_W   ),
++    .NUM_PORTS     (NUM_PORTS),
++    .MTU           (MTU      ),
++    .AXIS_AURORA_W (AURORA_W ),
++    .CHANNEL_OFFSET(0        )
++  ) aurora_rx_datapath_i (
++    .rfnoc_chdr_clk      (rfnoc_chdr_clk     ),
++    .rfnoc_chdr_rst      (r_rx_datapath_rst  ),
++    .aurora_clk          (aurora_clk         ),
++    .aurora_rst          (aurora_rst         ),
++    .m_axis_aurora_tdata (a_to_aurora_tdata  ),
++    .m_axis_aurora_tvalid(a_to_aurora_tvalid ),
++    .m_axis_aurora_tlast (a_to_aurora_tlast  ),
++    .m_axis_aurora_tready(a_to_aurora_tready ),
++    .s_axis_rfnoc_tdata  (in_noc_shell_tdata ),
++    .s_axis_rfnoc_tvalid (in_noc_shell_tvalid),
++    .s_axis_rfnoc_tlast  (in_noc_shell_tlast ),
++    .s_axis_rfnoc_tready (in_noc_shell_tready)
++  );
++
++
++  //---------------------------------------------------------------------------
++  // Flow Control
++  //---------------------------------------------------------------------------
++  // NFC output is connected to the wrapper which ignores it.
++  // CRC checking is disabled (crc_pass always 1, crc_valid always 0);
++  // axi_strip_preamble inside the wrapper drops CRC-error packets.
++
++  logic [  REG_PAUSE_COUNT_LEN-1:0] a_nfc_pause_count;
++  logic [ REG_PAUSE_THRESH_LEN-1:0] a_nfc_pause_thresh;
++  logic [REG_RESUME_THRESH_LEN-1:0] a_nfc_resume_thresh;
++
++  logic [15:0] a_nfc_tdata;
++  logic        a_nfc_tvalid;
++  logic        a_nfc_tready;
++
++  logic a_fc_overflow_stb;
++  logic a_aurora_hw_err_unused;  // not used for CRC on X310
++
++  aurora_flow_control #(
++    .DATA_WIDTH        (AURORA_W           ),
++    .MAX_PKT_SIZE_WORDS(2**AURORA_MTU      )
++  ) aurora_flow_control_i (
++    .clk              (aurora_clk                      ),
++    .rst              (aurora_rst || a_tx_datapath_rst ),
++    .nfc_pause_count  (a_nfc_pause_count               ),
++    .nfc_pause_thresh (a_nfc_pause_thresh              ),
++    .nfc_resume_thresh(a_nfc_resume_thresh             ),
++    .i_tdata          (a_from_aurora_tdata             ),
++    .i_tkeep          ('1                              ),
++    .i_tvalid         (a_from_aurora_tvalid            ),
++    .i_tlast          (a_from_aurora_tlast             ),
++    // CRC disabled on X310 — always pass, never valid
++    .i_crc_pass       (1'b1                            ),
++    .i_crc_valid      (1'b0                            ),
++    .o_tdata          (a_from_fc_tdata                 ),
++    .o_tkeep          (                                ),
++    .o_tvalid         (a_from_fc_tvalid                ),
++    .o_tlast          (a_from_fc_tlast                 ),
++    .o_tready         (a_from_fc_tready                ),
++    .m_axi_nfc_tvalid (a_nfc_tvalid                    ),
++    .m_axi_nfc_tdata  (a_nfc_tdata                     ),
++    .m_axi_nfc_tready (a_nfc_tready                    ),
++    .fc_overflow_stb  (a_fc_overflow_stb               ),
++    .crc_error_stb    (                                )
++  );
++
++
++  //---------------------------------------------------------------------------
++  // Aurora PHY Wrapper
++  //---------------------------------------------------------------------------
++
++  logic a_aurora_hard_err;
++  logic a_aurora_soft_err;
++  logic a_aurora_sw_rst;
++  logic a_tx_datapath_rst;
++
++  aurora_x310_wrapper #(
++    .SIMULATION(SIMULATION)
++  ) aurora_x310_wrapper_i (
++    .s_axi_tx_tdata  (a_to_aurora_tdata  ),
++    .s_axi_tx_tlast  (a_to_aurora_tlast  ),
++    .s_axi_tx_tvalid (a_to_aurora_tvalid ),
++    .s_axi_tx_tready (a_to_aurora_tready ),
++    .m_axi_rx_tdata  (a_from_aurora_tdata),
++    .m_axi_rx_tlast  (a_from_aurora_tlast),
++    .m_axi_rx_tvalid (a_from_aurora_tvalid),
++    .m_axi_rx_tready (1'b1              ),  // always ready — flow_control accepts
++    .s_axi_nfc_tvalid(a_nfc_tvalid      ),
++    .s_axi_nfc_tdata (a_nfc_tdata       ),
++    .s_axi_nfc_tready(a_nfc_tready      ),
++    .rxp             (rx_p              ),
++    .rxn             (rx_n              ),
++    .txp             (tx_p              ),
++    .txn             (tx_n              ),
++    .refclk_p        (refclk_p          ),
++    .refclk_n        (refclk_n          ),
++    .hard_err        (a_aurora_hard_err ),
++    .soft_err        (a_aurora_soft_err ),
++    .channel_up      (a_aurora_link_up  ),
++    .areset          (a_aurora_sw_rst   ),
++    .user_clk        (aurora_clk        )
++  );
++
++
++  //---------------------------------------------------------------------------
++  // Aurora Packet Counters
++  //---------------------------------------------------------------------------
++
++  logic a_aurora_rx_pkt_stb;
++  logic a_aurora_tx_pkt_stb;
++
++  logic [COUNTER_W-1:0] a_aurora_tx_pkt_ctr   = '0;
++  logic [COUNTER_W-1:0] a_aurora_rx_pkt_ctr   = '0;
++  logic [COUNTER_W-1:0] a_aurora_overflow_ctr = '0;
++
++  always_ff @(posedge aurora_clk) begin
++    a_aurora_tx_pkt_stb <= (a_to_aurora_tvalid && a_to_aurora_tready && a_to_aurora_tlast);
++    a_aurora_rx_pkt_stb <= (a_from_aurora_tvalid && a_from_aurora_tlast);
++
++    if (a_fc_overflow_stb)   a_aurora_overflow_ctr <= a_aurora_overflow_ctr + 1;
++    if (a_aurora_tx_pkt_stb) a_aurora_tx_pkt_ctr   <= a_aurora_tx_pkt_ctr   + 1;
++    if (a_aurora_rx_pkt_stb) a_aurora_rx_pkt_ctr   <= a_aurora_rx_pkt_ctr   + 1;
++
++    if (a_aurora_sw_rst) begin
++      a_aurora_overflow_ctr <= '0;
++      a_aurora_tx_pkt_ctr   <= '0;
++      a_aurora_rx_pkt_ctr   <= '0;
++    end
++  end
++
++  //synthesis translate_off
++  always @(a_aurora_overflow_ctr) begin
++    if (a_aurora_overflow_ctr > 0)
++      $warning("Flow control reported an overflow");
++  end
++  //synthesis translate_on
++
++
++  //---------------------------------------------------------------------------
++  // Clock Crossings — Aurora → RFNoC
++  //---------------------------------------------------------------------------
++
++  synchronizer #(.WIDTH(NUM_LANES)) synchronizer_lane_up (
++    .clk(rfnoc_chdr_clk  ),
++    .rst(1'b0            ),
++    .in (a_aurora_link_up),
++    .out(r_aurora_lane_up)
++  );
++
++  synchronizer synchronizer_channel_up (
++    .clk(rfnoc_chdr_clk  ),
++    .rst(1'b0            ),
++    .in (a_aurora_link_up),
++    .out(r_aurora_link_up)
++  );
++
++  synchronizer synchronizer_hard_err (
++    .clk(rfnoc_chdr_clk   ),
++    .rst(1'b0             ),
++    .in (a_aurora_hard_err),
++    .out(r_aurora_hard_err)
++  );
++
++  synchronizer synchronizer_soft_err (
++    .clk(rfnoc_chdr_clk   ),
++    .rst(1'b0             ),
++    .in (a_aurora_soft_err),
++    .out(r_aurora_soft_err)
++  );
++
++  // Report link_up as both mmcm_lock and pll_lock for software visibility
++  synchronizer synchronizer_mmcm_lock (
++    .clk(rfnoc_chdr_clk  ),
++    .rst(1'b0            ),
++    .in (a_aurora_link_up),
++    .out(r_aurora_mmcm_lock)
++  );
++
++  synchronizer synchronizer_pll_lock (
++    .clk(rfnoc_chdr_clk  ),
++    .rst(1'b0            ),
++    .in (a_aurora_link_up),
++    .out(r_aurora_pll_lock)
++  );
++
++  // SW reset: rfnoc_chdr_clk → aurora_clk (for data path logic)
++  pulse_synchronizer #(.MODE("POSEDGE")) pulse_sync_a_sw_rst (
++    .clk_a  (rfnoc_chdr_clk ),
++    .rst_a  (1'b0           ),
++    .pulse_a(r_aurora_sw_rst),
++    .busy_a (               ),
++    .clk_b  (aurora_clk     ),
++    .pulse_b(a_aurora_sw_rst)
++  );
++
++  pulse_synchronizer #(.MODE("POSEDGE")) pulse_sync_a_tx_rst (
++    .clk_a  (rfnoc_chdr_clk    ),
++    .rst_a  (1'b0              ),
++    .pulse_a(r_tx_datapath_rst ),
++    .busy_a (                  ),
++    .clk_b  (aurora_clk        ),
++    .pulse_b(a_tx_datapath_rst )
++  );
++
++  // FC parameter crossings
++  handshake_latch #(.WIDTH(REG_PAUSE_COUNT_LEN)) hs_pause_count (
++    .clk_a  (rfnoc_chdr_clk    ), .rst_a  (1'b0             ),
++    .valid_a(1'b1              ), .data_a (r_nfc_pause_count ),
++    .busy_a (                  ),
++    .clk_b  (aurora_clk        ), .valid_b(                  ),
++    .data_b (a_nfc_pause_count )
++  );
++
++  handshake_latch #(.WIDTH(REG_PAUSE_THRESH_LEN)) hs_pause_thresh (
++    .clk_a  (rfnoc_chdr_clk     ), .rst_a  (1'b0              ),
++    .valid_a(1'b1               ), .data_a (r_nfc_pause_thresh ),
++    .busy_a (                   ),
++    .clk_b  (aurora_clk         ), .valid_b(                   ),
++    .data_b (a_nfc_pause_thresh )
++  );
++
++  handshake_latch #(.WIDTH(REG_RESUME_THRESH_LEN)) hs_resume_thresh (
++    .clk_a  (rfnoc_chdr_clk      ), .rst_a  (1'b0               ),
++    .valid_a(1'b1                ), .data_a (r_nfc_resume_thresh ),
++    .busy_a (                    ),
++    .clk_b  (aurora_clk          ), .valid_b(                    ),
++    .data_b (a_nfc_resume_thresh )
++  );
++
++  // Counter crossings
++  handshake_latch #(.WIDTH(COUNTER_W)) hs_overflow_ctr (
++    .clk_a  (aurora_clk           ), .rst_a  (1'b0                 ),
++    .valid_a(1'b1                 ), .data_a (a_aurora_overflow_ctr),
++    .busy_a (                     ),
++    .clk_b  (rfnoc_chdr_clk       ), .valid_b(                     ),
++    .data_b (r_aurora_overflow_ctr)
++  );
++
++  // crc_err_ctr: no hardware CRC on X310, report zero
++  assign r_aurora_crc_err_ctr = '0;
++
++  handshake_latch #(.WIDTH(COUNTER_W)) hs_tx_pkt_ctr (
++    .clk_a  (aurora_clk         ), .rst_a  (1'b0               ),
++    .valid_a(1'b1               ), .data_a (a_aurora_tx_pkt_ctr),
++    .busy_a (                   ),
++    .clk_b  (rfnoc_chdr_clk     ), .valid_b(                   ),
++    .data_b (r_aurora_tx_pkt_ctr)
++  );
++
++  handshake_latch #(.WIDTH(COUNTER_W)) hs_rx_pkt_ctr (
++    .clk_a  (aurora_clk         ), .rst_a  (1'b0               ),
++    .valid_a(1'b1               ), .data_a (a_aurora_rx_pkt_ctr),
++    .busy_a (                   ),
++    .clk_b  (rfnoc_chdr_clk     ), .valid_b(                   ),
++    .data_b (r_aurora_rx_pkt_ctr)
++  );
++
++
++  //---------------------------------------------------------------------------
++  // Activity / Link Indicators
++  //---------------------------------------------------------------------------
++
++  logic a_aurora_activity_rst;
++  logic a_aurora_valid_reg      = 1'b0;
++  logic a_aurora_valid_reg_prev = 1'b0;
++  logic a_aurora_valid_pulse;
++  logic a_aurora_activity;
++
++  always_ff @(posedge aurora_clk) begin
++    a_aurora_activity_rst   <= aurora_rst | ~a_aurora_link_up;
++    a_aurora_valid_reg      <= a_to_aurora_tvalid | a_from_aurora_tvalid;
++    a_aurora_valid_reg_prev <= a_aurora_valid_reg;
++    a_aurora_valid_pulse    <= a_aurora_valid_reg && !a_aurora_valid_reg_prev;
++  end
++
++  pulse_stretch #(
++    .SCALE(SIMULATION ? 8 : 12_500_000)
++  ) pulse_stretch_activity_i (
++    .clk            (aurora_clk           ),
++    .rst            (a_aurora_activity_rst),
++    .pulse          (a_aurora_valid_pulse ),
++    .pulse_stretched(a_aurora_activity    )
++  );
++
++  // Cross activity and link_up to rfnoc_ctrl_clk for the output ports
++  logic c_aurora_activity;
++  logic c_aurora_link_up;
++
++  synchronizer sync_c_activity (
++    .clk(rfnoc_ctrl_clk   ), .rst('0),
++    .in (a_aurora_activity), .out(c_aurora_activity)
++  );
++
++  synchronizer sync_c_link_up (
++    .clk(rfnoc_ctrl_clk ), .rst('0),
++    .in (a_aurora_link_up), .out(c_aurora_link_up)
++  );
++
++  assign link_up  = c_aurora_link_up;
++  assign activity = c_aurora_activity;
++
++endmodule : rfnoc_block_aurora_x310
++
++
++`default_nettype wire
+-- 
+2.34.1
+
