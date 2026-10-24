@@ -1,7 +1,7 @@
 From c42d4bd90337b2fd9fed918dda6bdcee12297805 Mon Sep 17 00:00:00 2001
 From: yuriy <crimea82@protonmail.com>
 Date: Tue, 5 May 2026 20:48:24 -0400
-Subject: [PATCH 05/10] Updated build files to add x310 aurora example
+Subject: [PATCH] Updated build files to add x310 aurora example
 
 ---
  examples/CMakeLists.txt | 1 +

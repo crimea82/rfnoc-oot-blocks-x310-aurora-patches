@@ -1,7 +1,7 @@
 From 888815a8082c14417604ed1849241b0a99f6d31a Mon Sep 17 00:00:00 2001
 From: yuriy <crimea82@protonmail.com>
 Date: Fri, 23 Oct 2026 18:58:23 -0400
-Subject: [PATCH 10/10] cmake: Require C++17 explicitly
+Subject: [PATCH] cmake: Require C++17 explicitly
 
 Without this, builds against package-installed UHD fall back to C++14
 where type trait _v variable templates are not available.

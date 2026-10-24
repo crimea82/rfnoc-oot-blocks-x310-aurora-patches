@@ -1,7 +1,7 @@
 From abaa151316703c5303e66fe3e98f3ac4107f0ce8 Mon Sep 17 00:00:00 2001
 From: yuriy <crimea82@protonmail.com>
 Date: Sun, 3 May 2026 16:41:12 -0400
-Subject: [PATCH 01/10] Claude added X310 Aurora block
+Subject: [PATCH] Claude added X310 Aurora block
 
 ---
  icores/x310_Aurora_rfnoc_image_core.yml       |  76 ++

@@ -1,7 +1,7 @@
 From 2d087604ff8d1c42fb110de8f6771d9986df8800 Mon Sep 17 00:00:00 2001
 From: yuriy <crimea82@protonmail.com>
 Date: Sun, 3 May 2026 19:40:22 -0400
-Subject: [PATCH 02/10] Updated build instructuions
+Subject: [PATCH] Updated build instructuions
 
 ---
  README.md | 38 ++++++++++++++++++++++++++++++++++++++
