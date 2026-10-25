@@ -1,5 +1,5 @@
 From cd6c3225c78c876c0a1d14cd763044fc0b88a30b Mon Sep 17 00:00:00 2001
-From: yuriy <crimea82@protonmail.com>
+From: crimea82 <crimea82@protonmail.com>
 Date: Fri, 23 Oct 2026 20:48:01 -0400
 Subject: [PATCH] ip: aurora_x310: reuse IP_AURORA_64B66B_PCS_PMA_TRGT, avoid
  duplicate build

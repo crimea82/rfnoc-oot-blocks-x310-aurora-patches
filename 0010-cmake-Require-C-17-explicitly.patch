@@ -1,5 +1,5 @@
 From 888815a8082c14417604ed1849241b0a99f6d31a Mon Sep 17 00:00:00 2001
-From: yuriy <crimea82@protonmail.com>
+From: crimea82 <crimea82@protonmail.com>
 Date: Fri, 23 Oct 2026 18:58:23 -0400
 Subject: [PATCH] cmake: Require C++17 explicitly
 
