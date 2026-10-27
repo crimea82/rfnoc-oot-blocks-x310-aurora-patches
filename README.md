@@ -12,6 +12,18 @@ are supported:
 Patched UHD 4.10.0.0 must be built and installed before building the bitfile.
 See the uhd-x310-aurora-patches repo for instructions.
 
+To also get the `rfnoc_oot_blocks` Python bindings (used by the Python
+examples), install pybind11 before running CMake on the patched source tree.
+On Ubuntu 22.04:
+
+```bash
+sudo apt install pybind11-dev python3-pybind11 python3-dev python3-numpy
+```
+
+Without it CMake silently builds only the C++ library. The patched
+`rfnoc-oot-blocks/README.md` has a full section on building, installing and
+verifying the Python bindings.
+
 ## Usage
 
 ```

@@ -1,0 +1,112 @@
+From 75120045b344121db02ad09107e41460c3f08ab2 Mon Sep 17 00:00:00 2001
+From: crimea82 <crimea82@protonmail.com>
+Date: Tue, 27 Oct 2026 18:45:50 -0400
+Subject: [PATCH] README: document building and installing the Python bindings
+
+Add a section covering the host software build with the rfnoc_oot_blocks
+Python module: required pybind11 package and its ABI constraint against
+UHD's bundled pybind11, the CMake output lines that confirm the Python API
+is enabled, the cached ENABLE_PYTHON_API gotcha, the PYTHONPATH needed for
+/usr/local site-packages, and a short usage example.
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+---
+ README.md | 82 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 82 insertions(+)
+
+diff --git a/README.md b/README.md
+index 84edd0f..571ed50 100644
+--- a/README.md
++++ b/README.md
+@@ -157,6 +157,88 @@ use files that were installed into the right location.
+ 
+ ___________________________________________________________________________________________________
+ 
++## Building and installing the host software and Python bindings
++
++The host-side part of this module (the `librfnoc-oot-blocks` block controller
++library, headers, the `rfnoc_oot_blocks` Python module and the examples) is
++built with CMake. The Python bindings are **optional and silently skipped** if
++their build dependencies are not found, so check the CMake output carefully.
++
++### Prerequisites
++
++- UHD 4.10 built **with the Python API** and installed (the default UHD build
++  does this; `uhd_config_info --enabled-components` must list
++  `LibUHD - Python API`). `python3 -c "import uhd; print(uhd.__version__)"`
++  must print exactly the version that `uhd_config_info --version` reports,
++  otherwise CMake refuses to enable the Python API for this module.
++- pybind11 CMake package and headers. On Ubuntu 22.04:
++
++  ```sh
++  sudo apt install pybind11-dev python3-pybind11 python3-dev python3-numpy
++  ```
++
++  The pybind11 version must be ABI-compatible with the pybind11 that UHD was
++  built against (UHD 4.10 bundles pybind11 2.10, "internals v4"). Ubuntu 22.04's
++  `pybind11-dev` 2.9.1 shares that ABI and has been verified to work. Do **not**
++  use pybind11 3.x from pip; it uses a newer internals ABI and the module will
++  fail to resolve `uhd.rfnoc.noc_block_base` at import time.
++
++### Build and install
++
++```sh
++cd /path/to/rfnoc-oot-blocks
++cmake -S . -B build        # add -DUHD_FPGA_DIR=/path/to/uhd/fpga to also get FPGA targets
++make -C build -j$(nproc)
++sudo make -C build install
++```
++
++In the `cmake` output, confirm these two lines are present:
++
++```
++-- Enabling Python API for this module.
++-- Installing 'rfnoc_oot_blocks' Python module to: /usr/local/lib/python3.10/site-packages
++```
++
++If they are missing, pybind11 or the `uhd` Python module was not found.
++Install the missing dependency and **re-run CMake with a fresh cache**, because
++`ENABLE_PYTHON_API` is a cached variable and keeps its `FALSE` value once it
++has been computed:
++
++```sh
++rm -rf build/CMakeCache.txt build/CMakeFiles   # or: cmake -S . -B build -DENABLE_PYTHON_API=ON
++cmake -S . -B build
++```
++
++### Verify
++
++```sh
++python3 -c "from rfnoc_oot_blocks import AuroraBlockControl, channel_stop_policy; print(AuroraBlockControl)"
++```
++
++This should print `<class 'rfnoc_oot_blocks.rfnoc_oot_blocks_python.aurora_block_control'>`.
++If you get `ModuleNotFoundError: No module named 'uhd'` (or `rfnoc_oot_blocks`),
++note that UHD and this module are installed to
++`/usr/local/lib/python3.10/site-packages`, which Ubuntu's system Python does
++not search by default. Add it to your environment:
++
++```sh
++export PYTHONPATH=/usr/local/lib/python3.10/site-packages   # e.g. in ~/.bashrc
++```
++
++### Using the bindings
++
++```python
++import uhd.rfnoc
++from rfnoc_oot_blocks import AuroraBlockControl, channel_stop_policy
++
++graph = uhd.rfnoc.RfnocGraph("addr=192.168.20.2")
++aurora = AuroraBlockControl(graph.get_block("0/Aurora#0"))
++print(aurora.get_status().link_status)
++```
++
++The Python examples in `examples/` (installed to
++`/usr/local/share/uhd/examples/rfnoc-oot-blocks/`) use the bindings the same way.
++
+ ## Updated build for X310 Aurora OOT block
+ 
+ This build is using uhd 4.10.0.0 and the isntructions to build this Aurora image for X310 are as follows:
+-- 
+2.34.1
+

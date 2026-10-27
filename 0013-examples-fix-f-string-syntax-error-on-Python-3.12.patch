@@ -1,0 +1,44 @@
+From 65181fc3b4faaff0eeabf491bc456e891018f93e Mon Sep 17 00:00:00 2001
+From: crimea82 <crimea82@protonmail.com>
+Date: Tue, 27 Oct 2026 18:49:32 -0400
+Subject: [PATCH] examples: fix f-string syntax error on Python < 3.12
+
+Both loopback examples nested double quotes inside a double-quoted
+f-string, which is only valid from Python 3.12 (PEP 701). On Python 3.10
+the scripts fail to parse. Use single quotes for the inner separator.
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+---
+ examples/aurora_loopback_host.py        | 2 +-
+ examples/aurora_loopback_nullsrcsink.py | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/examples/aurora_loopback_host.py b/examples/aurora_loopback_host.py
+index 2f84582..645f867 100755
+--- a/examples/aurora_loopback_host.py
++++ b/examples/aurora_loopback_host.py
+@@ -332,7 +332,7 @@ def main():
+     print(f"Aurora link up within {dt:0.1f} seconds")
+     # ... print information about used channels
+     print(
+-        f"The Aurora block has {aurora_block.get_num_input_ports()} channels, using channel(s) {",".join([str(x) for x in args.aurora_channels])}"
++        f"The Aurora block has {aurora_block.get_num_input_ports()} channels, using channel(s) {','.join([str(x) for x in args.aurora_channels])}"
+     )
+     for idx, chan in enumerate(args.aurora_channels):
+         # Add connection
+diff --git a/examples/aurora_loopback_nullsrcsink.py b/examples/aurora_loopback_nullsrcsink.py
+index 1f2cf7c..997162f 100755
+--- a/examples/aurora_loopback_nullsrcsink.py
++++ b/examples/aurora_loopback_nullsrcsink.py
+@@ -254,7 +254,7 @@ def main():
+         print(f"Aurora link up within {dt:0.1f} seconds")
+         # ... print information about used channels
+         print(
+-            f"The Aurora block has {aurora_block.get_num_input_ports()} channels, using channel(s) {",".join([str(x) for x in args.aurora_channels])}"
++            f"The Aurora block has {aurora_block.get_num_input_ports()} channels, using channel(s) {','.join([str(x) for x in args.aurora_channels])}"
+         )
+         for idx, chan in enumerate(args.aurora_channels):
+             # Add connection
+-- 
+2.34.1
+
